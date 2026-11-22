@@ -90,13 +90,33 @@ go run main.go
 
 If you want to package a standalone desktop binary, use the included Go build scripts (`go run build_mac.go` for a macOS `.app` bundle or `go run build_linux.go` for a Linux `.AppImage`).
 
-## Quick Start Example (Web / `pyestro-web`)
+## Quick Start Example
 
-You can test Pyestro Studio right away using the hosted demo app at `https://expo-route-kit.netlify.app/`:
+Both **Web** and **Android** can run the same [expo-route-kit](https://github.com/carlosxfelipe/expo-route-kit) smoke flow below.
+
+### Web (`pyestro-web`)
+
+Test right away using the hosted demo app at `https://expo-route-kit.netlify.app/`:
 
 1. Open the **Inspector** tab and select **Web (`pyestro-web`)**.
 2. Enter `https://expo-route-kit.netlify.app/` in the URL input (which defaults to `http://localhost:8081`).
-3. Click **Connect** to capture the live screen and inspect elements, or paste the `expo-route-kit.yaml` flow below into the **Maestro YAML Flow** editor and click **Validate** / **Run Flow**:
+3. Click **Connect** to capture the live screen and inspect elements, or paste the flow below into the **Maestro YAML Flow** editor and click **Validate** / **Run Flow**.
+
+### Android (`pyestro`)
+
+1. Start an Android emulator (via Android Studio's **Device Manager** or `emulator -avd <name>`) or connect a physical phone with **USB debugging** enabled, and confirm `adb devices` lists it as `device`.
+2. Clone `expo-route-kit` and install the native Android build (Expo Go will not match `appId`):
+
+   ```bash
+   git clone https://github.com/carlosxfelipe/expo-route-kit.git
+   cd expo-route-kit && npm install
+   npm run build:android && adb install -r apk/expo-route-kit-v1.0.0.apk
+   ```
+
+3. Open the **Inspector** tab, select **Android (`pyestro`)**, optionally enter `com.carlosxfelipe.exporoutekit` in **Optional appId**, and click **Connect** (click **Re-scan Tools** if you started the emulator after opening Studio).
+4. Open `.maestro/smoke.yaml` from the cloned repo (or paste the flow below) into **Maestro YAML Flow** and click **Validate** / **Run Flow**.
+
+### Sample Flow (`expo-route-kit.yaml`)
 
 ```yaml
 appId: com.carlosxfelipe.exporoutekit

@@ -510,6 +510,7 @@ async function connectSession() {
     const snap = await window.api_start_session(cfg);
     updateSessionControls(true);
     applySnapshot(snap);
+    appendLog(`Connected (${currentTarget})`);
     showToast(`Connected (${currentTarget})`);
   } catch (err) {
     appendLog(`Session error: ${err}`);
@@ -861,8 +862,14 @@ async function validateCurrentFlow() {
 
 async function runCurrentFlow() {
   const btn = document.getElementById("btn-run-flow");
+  if (btn.disabled) return;
+  const labelEl = btn.querySelector("span");
   btn.disabled = true;
-  btn.textContent = "Running...";
+  if (labelEl) {
+    labelEl.textContent = "Running...";
+  } else {
+    btn.textContent = "Running...";
+  }
   const yaml = document.getElementById("yaml-editor").value;
   try {
     const urlInput = document.getElementById("web-url");
@@ -884,6 +891,9 @@ async function runCurrentFlow() {
     });
     const summary = `Flow finished: ${res.passed}/${res.total} passed (${res.durationMs}ms)`;
     appendLog(summary);
+    if (res.videoPath) {
+      appendLog(`Video saved: ${res.videoPath}`);
+    }
     if (res.reportPath) {
       appendLog(`Report saved: ${res.reportPath}`);
     }
@@ -893,7 +903,11 @@ async function runCurrentFlow() {
     showToast("Run failed: " + err);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Run Flow";
+    if (labelEl) {
+      labelEl.textContent = "Run Flow";
+    } else {
+      btn.textContent = "Run Flow";
+    }
   }
 }
 
@@ -1189,6 +1203,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     new ResizeObserver(() => fitScreenFrame()).observe(stageEl);
   }
   window.addEventListener("resize", fitScreenFrame);
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      runCurrentFlow();
+    }
+  });
 
   await refreshSystemInfo();
   await loadEnvConfigForCurrentFlow();

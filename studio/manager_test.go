@@ -243,3 +243,39 @@ print(json.dumps(env, sort_keys=True))
 		}
 	}
 }
+
+func TestWorkerDefaultArtifactsDirWritable(t *testing.T) {
+	info := GetSystemInfo()
+	if !info.Pyestro.Found || info.Pyestro.PythonPath == "" {
+		t.Skip("installed pyestro python not available")
+	}
+
+	tmpDir := t.TempDir()
+	fakeHome := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(filepath.Join(fakeHome, "Documents"), 0755); err != nil {
+		t.Fatalf("mkdir fake Documents: %v", err)
+	}
+	t.Setenv("HOME", fakeHome)
+
+	workerFile := filepath.Join(tmpDir, "worker.py")
+	if err := os.WriteFile(workerFile, []byte(embeddedWorkerPy), 0644); err != nil {
+		t.Fatalf("write worker.py: %v", err)
+	}
+
+	script := `
+import importlib.util, os, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("studio_worker", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+os.chdir("/")
+p = mod._default_artifacts_dir()
+want = Path(os.environ["HOME"]) / "Documents" / "Pyestro Studio" / "artifacts"
+assert p == want, f"got {p}, want {want}"
+print(p)
+`
+	out, err := exec.Command(info.Pyestro.PythonPath, "-c", script, workerFile).CombinedOutput()
+	if err != nil {
+		t.Fatalf("python _default_artifacts_dir failed: %v\n%s", err, out)
+	}
+}

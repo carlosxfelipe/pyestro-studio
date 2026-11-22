@@ -135,6 +135,26 @@ def _coerce_env_dict(raw: Any) -> dict[str, str]:
     }
 
 
+def _default_artifacts_dir() -> Path:
+    cwd = Path.cwd().resolve()
+    if cwd != cwd.parent and os.access(cwd, os.W_OK):
+        return cwd / "artifacts"
+    home = Path.home()
+    candidates = []
+    docs = home / "Documents"
+    if docs.is_dir():
+        candidates.append(docs / "Pyestro Studio" / "artifacts")
+    candidates.append(home / "Pyestro Studio" / "artifacts")
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            if os.access(candidate, os.W_OK):
+                return candidate
+        except OSError:
+            continue
+    return Path(tempfile.gettempdir()) / "pyestro-studio" / "artifacts"
+
+
 def _fallback_find_env_file(start: Path | None) -> Path | None:
     base = start.resolve() if start is not None else Path.cwd().resolve()
     if base.is_file() or (not base.exists() and base.suffix in (".yaml", ".yml")):
@@ -446,7 +466,7 @@ class StudioSession:
         artifacts_dir = (
             flow_path.parent / "artifacts"
             if flow_path is not None
-            else Path.cwd() / "artifacts"
+            else _default_artifacts_dir()
         )
 
         # Reuse active session driver when already connected, otherwise create a temporary one.
