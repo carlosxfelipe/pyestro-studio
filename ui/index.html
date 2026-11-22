@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en" translate="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="google" content="notranslate" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pyestro Studio</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div class="adw-window">
+      <header class="adw-headerbar">
+        <div class="adw-header-start">
+          <div class="adw-header-brand">
+            <img src="icon.png" alt="" aria-hidden="true" />
+            <span class="header-brand-title">Pyestro Studio</span>
+          </div>
+          <span class="header-meta" id="header-flow-path">Unsaved flow</span>
+        </div>
+
+        <nav class="adw-view-switcher" aria-label="Main navigation">
+          <button
+            type="button"
+            class="adw-view-tab active"
+            id="nav-studio"
+            aria-current="page"
+            onclick="switchPage('studio')"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M9 3v18M14 9l3 3-3 3" />
+            </svg>
+            <span>Inspector</span>
+          </button>
+
+          <button
+            type="button"
+            class="adw-view-tab"
+            id="nav-system"
+            onclick="switchPage('system')"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.79 1.02 1.44 1.09H21a2 2 0 0 1 0 4h-.09c-.65.07-1.18.49-1.51 1.09z"
+              />
+            </svg>
+            <span>Environment</span>
+            <span class="adw-nav-dot" id="env-status-dot"></span>
+          </button>
+
+          <button
+            type="button"
+            class="adw-view-tab"
+            id="nav-about"
+            onclick="switchPage('about')"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>About</span>
+          </button>
+        </nav>
+
+        <div class="adw-header-actions">
+          <span
+            class="status-pill muted"
+            id="header-session-pill"
+            title="Active session status"
+            >Idle</span
+          >
+          <button
+            type="button"
+            class="adw-btn"
+            onclick="refreshSystemInfo()"
+            title="Re-scan uv, adb, pyestro, and pyestro-web"
+          >
+            Re-scan Tools
+          </button>
+        </div>
+      </header>
+
+      <main class="adw-content">
+        <!-- PAGE: STUDIO -->
+        <section class="adw-page studio-page" id="page-studio">
+          <div
+            class="env-warning-banner hidden"
+            id="studio-env-banner"
+            role="status"
+          >
+            <div>
+              <strong id="studio-env-banner-title"
+                >Target runtime missing</strong
+              >
+              <p id="studio-env-banner-msg"></p>
+            </div>
+            <button
+              type="button"
+              class="adw-btn adw-btn-primary"
+              onclick="switchPage('system')"
+            >
+              Configure Environment
+            </button>
+          </div>
+
+          <div class="connection-bar card">
+            <div class="target-segmented" role="tablist" aria-label="Target">
+              <button
+                type="button"
+                class="seg-btn active"
+                id="target-btn-android"
+                role="tab"
+                aria-selected="true"
+                onclick="selectTarget('android')"
+              >
+                Android (pyestro)
+              </button>
+              <button
+                type="button"
+                class="seg-btn"
+                id="target-btn-web"
+                role="tab"
+                aria-selected="false"
+                onclick="selectTarget('web')"
+              >
+                Web (pyestro-web)
+              </button>
+            </div>
+
+            <div class="conn-fields" id="conn-fields-android">
+              <select
+                id="android-serial"
+                class="adw-input"
+                title="ADB Device Serial"
+              >
+                <option value="">Default ADB device</option>
+              </select>
+              <input
+                type="text"
+                id="android-appid"
+                class="adw-input"
+                placeholder="Optional appId (e.g. com.android.settings)"
+              />
+            </div>
+
+            <div class="conn-fields hidden" id="conn-fields-web">
+              <input
+                type="text"
+                id="web-url"
+                class="adw-input url-input"
+                value="http://localhost:8081"
+                placeholder="https://example.com or http://localhost:8081"
+              />
+              <select id="web-browser" class="adw-input">
+                <option value="chromium">Chromium</option>
+                <option value="firefox">Firefox</option>
+                <option value="webkit">WebKit</option>
+              </select>
+              <select id="web-viewport" class="adw-input">
+                <option value="mobile">Mobile (390x844)</option>
+                <option value="desktop">Desktop (1280x720)</option>
+                <option value="tablet">Tablet (768x1024)</option>
+              </select>
+              <label
+                class="checkbox-inline"
+                title="Run Playwright browser headless for Studio preview"
+              >
+                <input type="checkbox" id="web-headless" checked />
+                <span>Headless</span>
+              </label>
+            </div>
+
+            <div class="conn-actions">
+              <button
+                type="button"
+                class="adw-btn adw-btn-primary"
+                id="btn-connect"
+                onclick="connectSession()"
+              >
+                Connect
+              </button>
+              <button
+                type="button"
+                class="adw-btn"
+                id="btn-refresh-snap"
+                onclick="refreshSnapshot()"
+                disabled
+              >
+                Snapshot
+              </button>
+              <button
+                type="button"
+                class="adw-btn adw-btn-destructive"
+                id="btn-disconnect"
+                onclick="disconnectSession()"
+                disabled
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+
+          <div class="studio-workspace">
+            <!-- LEFT: DEVICE / BROWSER PREVIEW + ELEMENT INSPECTOR -->
+            <div class="studio-pane preview-pane card">
+              <div class="pane-header">
+                <div class="pane-title-group">
+                  <span class="pane-title">Live Screen</span>
+                  <span class="pane-subtitle" id="screen-meta"
+                    >Not connected</span
+                  >
+                </div>
+                <div class="pane-tools">
+                  <label class="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      id="toggle-overlays"
+                      checked
+                      onchange="renderOverlays()"
+                    />
+                    <span>Overlays</span>
+                  </label>
+                  <button
+                    type="button"
+                    class="adw-btn adw-btn-sm"
+                    onclick="quickStep('- back')"
+                    id="btn-quick-back"
+                    disabled
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    class="adw-btn adw-btn-sm"
+                    onclick="quickStep('- hideKeyboard')"
+                    id="btn-quick-kbd"
+                    disabled
+                  >
+                    Hide Kbd
+                  </button>
+                </div>
+              </div>
+
+              <div class="screen-stage" id="screen-stage">
+                <div class="empty-stage" id="empty-stage">
+                  <p>
+                    Connect to an Android emulator/device or Web URL to capture
+                    the live screen and inspect Maestro selectors.
+                  </p>
+                </div>
+                <div class="screen-frame hidden" id="screen-frame">
+                  <img id="screen-img" alt="Captured screen" />
+                  <div class="overlay-layer" id="overlay-layer"></div>
+                </div>
+              </div>
+
+              <div class="inspector-card" id="inspector-card">
+                <div class="inspector-empty" id="inspector-empty">
+                  Click any highlighted element on the screen or in the Element
+                  Tree to generate Maestro selectors.
+                </div>
+                <div class="inspector-details hidden" id="inspector-details">
+                  <div class="inspector-head">
+                    <div>
+                      <strong id="insp-title">Element</strong>
+                      <span class="mono-dim" id="insp-bounds"
+                        >[0, 0, 0, 0]</span
+                      >
+                    </div>
+                    <div class="inspector-quick-btns">
+                      <button
+                        type="button"
+                        class="adw-btn adw-btn-sm adw-btn-primary"
+                        onclick="runSelectedTap()"
+                      >
+                        Run tapOn
+                      </button>
+                      <button
+                        type="button"
+                        class="adw-btn adw-btn-sm"
+                        onclick="insertSelectedCommand('tapOn')"
+                      >
+                        + tapOn
+                      </button>
+                      <button
+                        type="button"
+                        class="adw-btn adw-btn-sm"
+                        onclick="insertSelectedCommand('assertVisible')"
+                      >
+                        + assertVisible
+                      </button>
+                    </div>
+                  </div>
+                  <div class="inspector-attrs" id="insp-attrs"></div>
+                  <div class="inspector-selectors">
+                    <span class="section-mini-label"
+                      >Suggested Maestro Selectors (click to copy):</span
+                    >
+                    <div class="selector-chips" id="insp-selectors"></div>
+                  </div>
+                  <div class="inspector-input-row">
+                    <input
+                      type="text"
+                      id="insp-type-text"
+                      class="adw-input"
+                      placeholder="Text to type into selected element..."
+                    />
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-sm"
+                      onclick="runSelectedType()"
+                    >
+                      Tap &amp; Type
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT: YAML EDITOR + STEP REPL + CONSOLE / TREE -->
+            <div class="studio-pane editor-pane card">
+              <div class="pane-header">
+                <div class="pane-title-group">
+                  <span class="pane-title">Maestro YAML Flow</span>
+                  <span class="status-pill muted" id="yaml-valid-pill"
+                    >Unchecked</span
+                  >
+                  <span class="status-pill warn hidden" id="yaml-dirty-pill"
+                    >Modified</span
+                  >
+                </div>
+                <div class="pane-tools">
+                  <div
+                    class="adw-linked-group"
+                    role="group"
+                    aria-label="File actions"
+                  >
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-sm adw-btn-icon"
+                      id="btn-new-flow"
+                      onclick="newFlowTemplate()"
+                      title="New Flow"
+                      aria-label="New Flow"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                        />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="12" y1="18" x2="12" y2="12" />
+                        <line x1="9" y1="15" x2="15" y2="15" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-sm adw-btn-icon"
+                      id="btn-open-flow"
+                      onclick="openFlowDialog()"
+                      title="Open Flow (Cmd+O)"
+                      aria-label="Open Flow"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-sm adw-btn-icon"
+                      id="btn-save-flow"
+                      onclick="saveFlow(false)"
+                      title="Save Flow (Cmd+S)"
+                      aria-label="Save Flow"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                        />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-sm adw-btn-icon"
+                      id="btn-save-as-flow"
+                      onclick="saveFlow(true)"
+                      title="Save Flow As… (Cmd+Shift+S)"
+                      aria-label="Save Flow As"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                        />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <path d="M12 11V7" />
+                        <polyline points="9.5 9.5 12 7 14.5 9.5" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="adw-btn adw-btn-sm"
+                    onclick="validateCurrentFlow()"
+                    title="Validate YAML syntax (Cmd+Shift+V)"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.1"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>Validate</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="adw-btn adw-btn-sm adw-btn-primary"
+                    id="btn-run-flow"
+                    onclick="runCurrentFlow()"
+                    title="Run full YAML flow (Cmd+Enter)"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      stroke="none"
+                      aria-hidden="true"
+                    >
+                      <polygon points="6 4 20 12 6 20 6 4" />
+                    </svg>
+                    <span>Run Flow</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="flow-options-bar">
+                <label class="checkbox-inline">
+                  <input type="checkbox" id="opt-record" />
+                  <span>Record Video</span>
+                </label>
+                <label class="checkbox-inline">
+                  <input type="checkbox" id="opt-report" />
+                  <span>Generate HTML + JUnit Report</span>
+                </label>
+              </div>
+
+              <textarea
+                id="yaml-editor"
+                class="yaml-editor"
+                spellcheck="false"
+                placeholder="Write Maestro-compatible YAML here..."
+              ></textarea>
+
+              <div class="repl-bar">
+                <input
+                  type="text"
+                  id="repl-input"
+                  class="adw-input mono-input"
+                  placeholder='Quick step, e.g. - tapOn: "Login" or - assertVisible: "Home"'
+                />
+                <button
+                  type="button"
+                  class="adw-btn adw-btn-primary"
+                  id="btn-run-step"
+                  onclick="runReplStep()"
+                  disabled
+                >
+                  Run Step
+                </button>
+              </div>
+
+              <div class="bottom-tabs-wrap">
+                <div class="bottom-tabs" role="tablist" aria-label="Output">
+                  <button
+                    type="button"
+                    class="tab-btn active"
+                    id="tab-btn-logs"
+                    role="tab"
+                    aria-selected="true"
+                    onclick="switchBottomTab('logs')"
+                  >
+                    Console Logs
+                  </button>
+                  <button
+                    type="button"
+                    class="tab-btn"
+                    id="tab-btn-tree"
+                    role="tab"
+                    aria-selected="false"
+                    onclick="switchBottomTab('tree')"
+                  >
+                    Element Tree (<span id="tree-count">0</span>)
+                  </button>
+                </div>
+
+                <div class="tab-panel" id="tab-panel-logs">
+                  <pre class="console-output" id="console-output"></pre>
+                </div>
+
+                <div class="tab-panel hidden" id="tab-panel-tree">
+                  <input
+                    type="text"
+                    id="tree-filter"
+                    class="adw-input tree-filter"
+                    placeholder="Filter elements by text, id, or class..."
+                    oninput="renderElementTree()"
+                  />
+                  <div class="element-tree-list" id="element-tree-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PAGE: SYSTEM & ENVIRONMENT -->
+        <section class="adw-page hidden" id="page-system">
+          <div class="adw-prefs-page">
+            <div class="packaging-callout card">
+              <div class="callout-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <div class="callout-body">
+                <h3>Setup Requirements</h3>
+                <p id="packaging-note-text">
+                  To run tests, make sure <code>uv</code> is installed on your
+                  computer (and <code>adb</code> if you are testing Android
+                  devices). Once <code>uv</code> is available, you can install
+                  <code>pyestro</code> and <code>pyestro-web</code> using the
+                  buttons below.
+                </p>
+              </div>
+            </div>
+
+            <div class="adw-prefs-group">
+              <div class="prefs-group-head">
+                <h2>Target Readiness</h2>
+              </div>
+              <div class="boxed-list">
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">Android Target (pyestro)</div>
+                    <div class="row-subtitle">
+                      Requires <code>pyestro</code> and Android Platform Tools
+                      (<code>adb</code>).
+                    </div>
+                  </div>
+                  <div class="row-suffix">
+                    <span class="status-pill muted" id="diag-android-ready"
+                      >Checking</span
+                    >
+                  </div>
+                </div>
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">Web Target (pyestro-web)</div>
+                    <div class="row-subtitle">
+                      Requires <code>pyestro-web</code> with Playwright browsers
+                      installed.
+                    </div>
+                  </div>
+                  <div class="row-suffix">
+                    <span class="status-pill muted" id="diag-web-ready"
+                      >Checking</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="adw-prefs-group">
+              <div class="prefs-group-head">
+                <h2>Detected Tools &amp; Runtimes</h2>
+                <button
+                  type="button"
+                  class="adw-btn adw-btn-sm"
+                  onclick="refreshSystemInfo()"
+                >
+                  Refresh
+                </button>
+              </div>
+              <div class="boxed-list" id="tool-status-list"></div>
+            </div>
+
+            <div class="adw-prefs-group">
+              <div class="prefs-group-head">
+                <div>
+                  <h2>Install &amp; Manage Tools</h2>
+                  <p class="prefs-group-desc">
+                    Install <code>uv</code> for your operating system, then
+                    install or update the automation packages.
+                  </p>
+                </div>
+              </div>
+              <div class="boxed-list">
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">uv (Package Manager)</div>
+                    <div class="row-subtitle" id="uv-install-desc">
+                      Detects your operating system and installs uv
+                      automatically
+                    </div>
+                  </div>
+                  <div class="row-suffix">
+                    <button
+                      type="button"
+                      class="adw-btn adw-btn-primary"
+                      id="btn-install-uv"
+                      onclick="installTool('uv', this)"
+                    >
+                      Install uv
+                    </button>
+                  </div>
+                </div>
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">pyestro (Android)</div>
+                    <div class="row-subtitle">
+                      Android automation package (requires <code>uv</code> and
+                      <code>adb</code>)
+                    </div>
+                  </div>
+                  <div class="row-suffix">
+                    <button
+                      type="button"
+                      class="adw-btn"
+                      id="btn-install-pyestro"
+                      onclick="installTool('pyestro', this)"
+                    >
+                      Install / Upgrade
+                    </button>
+                  </div>
+                </div>
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">
+                      pyestro-web (Web &amp; Chromium)
+                    </div>
+                    <div class="row-subtitle">
+                      Web automation package and Playwright Chromium browser
+                    </div>
+                  </div>
+                  <div class="row-suffix">
+                    <button
+                      type="button"
+                      class="adw-btn"
+                      id="btn-install-pyestro-web"
+                      onclick="installTool('pyestro-web', this)"
+                    >
+                      Install / Upgrade
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <pre
+                class="console-output compact-console hidden"
+                id="uv-install-output"
+              ></pre>
+            </div>
+
+            <div class="adw-prefs-group">
+              <div class="prefs-group-head">
+                <div>
+                  <h2>Android Setup (ADB)</h2>
+                  <p class="prefs-group-desc">
+                    Only needed for testing Android devices or emulators.
+                  </p>
+                </div>
+                <span class="status-pill muted" id="adb-setup-status-pill"
+                  >Checking</span
+                >
+              </div>
+              <div class="boxed-list">
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">
+                      1. Install Android Platform Tools (<code>adb</code>)
+                    </div>
+                    <div class="row-subtitle" id="adb-setup-os-hint">
+                      Download Android SDK Platform Tools and add the
+                      <code>platform-tools</code> folder to your system PATH (or
+                      install via Android Studio).
+                    </div>
+                  </div>
+                </div>
+                <div class="boxed-row">
+                  <div class="row-meta">
+                    <div class="row-title">
+                      2. Enable USB Debugging (or start an Emulator)
+                    </div>
+                    <div class="row-subtitle">
+                      On a phone: <strong>Settings → About phone</strong> → tap
+                      <strong>Build number</strong> several times until
+                      Developer options unlocks → enable
+                      <strong>USB debugging</strong>, then connect via USB and
+                      tap <strong>Allow</strong>.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="boxed-row boxed-row-link"
+                  onclick="
+                    openExternalLink(
+                      'https://developer.android.com/tools/releases/platform-tools',
+                    )
+                  "
+                >
+                  <div class="row-meta">
+                    <div class="row-title">
+                      Download Android SDK Platform Tools
+                    </div>
+                    <div class="row-subtitle">
+                      developer.android.com/tools/releases/platform-tools
+                    </div>
+                  </div>
+                  <span class="row-chevron" aria-hidden="true">›</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="adw-prefs-group">
+              <div class="prefs-group-head">
+                <h2>Connected ADB Devices</h2>
+              </div>
+              <div class="boxed-list" id="adb-devices-list">
+                <div class="boxed-row-empty">No ADB devices detected.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PAGE: ABOUT -->
+        <section class="adw-page hidden" id="page-about">
+          <div class="adw-about-wrap">
+            <div class="about-hero">
+              <div class="about-app-icon" aria-hidden="true">
+                <img src="icon.png" alt="" />
+              </div>
+              <h2>Pyestro Studio</h2>
+              <p class="about-desc">
+                Desktop Maestro-compatible visual inspector, live step REPL, and
+                YAML flow runner powered by <strong>pyestro</strong> (Android
+                via ADB) and <strong>pyestro-web</strong> (Web &amp; React
+                Native for Web via Playwright).
+              </p>
+            </div>
+
+            <div class="boxed-list">
+              <button
+                type="button"
+                class="boxed-row boxed-row-link"
+                onclick="
+                  openExternalLink('https://github.com/carlosxfelipe/pyestro')
+                "
+              >
+                <div class="row-meta">
+                  <div class="row-title">Pyestro on GitHub</div>
+                  <div class="row-subtitle">
+                    github.com/carlosxfelipe/pyestro
+                  </div>
+                </div>
+                <span class="row-chevron" aria-hidden="true">›</span>
+              </button>
+              <button
+                type="button"
+                class="boxed-row boxed-row-link"
+                onclick="
+                  openExternalLink(
+                    'https://github.com/carlosxfelipe/pyestro-web',
+                  )
+                "
+              >
+                <div class="row-meta">
+                  <div class="row-title">Pyestro Web on GitHub</div>
+                  <div class="row-subtitle">
+                    github.com/carlosxfelipe/pyestro-web
+                  </div>
+                </div>
+                <span class="row-chevron" aria-hidden="true">›</span>
+              </button>
+              <button
+                type="button"
+                class="boxed-row boxed-row-link"
+                onclick="openExternalLink('https://github.com/crgimenes/glaze')"
+              >
+                <div class="row-meta">
+                  <div class="row-title">Glaze Toolkit</div>
+                  <div class="row-subtitle">github.com/crgimenes/glaze</div>
+                </div>
+                <span class="row-chevron" aria-hidden="true">›</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div
+      class="adw-dialog-backdrop hidden"
+      id="adw-dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="adw-dialog-title"
+    >
+      <div class="adw-alert-dialog">
+        <h2 class="adw-dialog-title" id="adw-dialog-title">Confirm Action</h2>
+        <p class="adw-dialog-body" id="adw-dialog-body"></p>
+        <p class="adw-dialog-path hidden" id="adw-dialog-path"></p>
+        <div class="adw-dialog-actions" id="adw-dialog-actions"></div>
+      </div>
+    </div>
+
+    <div
+      class="adw-toast"
+      id="adw-toast"
+      role="status"
+      aria-live="polite"
+    ></div>
+    <script src="app.js"></script>
+  </body>
+</html>
