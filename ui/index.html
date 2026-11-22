@@ -508,12 +508,22 @@
                 </label>
               </div>
 
-              <textarea
-                id="yaml-editor"
-                class="yaml-editor"
-                spellcheck="false"
-                placeholder="Write Maestro-compatible YAML here..."
-              ></textarea>
+              <div class="yaml-editor-wrap">
+                <pre
+                  id="yaml-highlight"
+                  class="yaml-highlight"
+                  aria-hidden="true"
+                ></pre>
+                <textarea
+                  id="yaml-editor"
+                  class="yaml-editor"
+                  spellcheck="false"
+                  autocapitalize="off"
+                  autocomplete="off"
+                  autocorrect="off"
+                  placeholder="Write Maestro-compatible YAML here..."
+                ></textarea>
+              </div>
 
               <div class="repl-bar">
                 <input

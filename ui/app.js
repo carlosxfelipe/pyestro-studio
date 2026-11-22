@@ -778,6 +778,7 @@ function fileBaseName(path) {
 }
 
 function updateFlowStateUI() {
+  renderYamlHighlight();
   const dirty = isFlowDirty();
   const dirtyPill = document.getElementById("yaml-dirty-pill");
   if (dirtyPill) {
@@ -1029,6 +1030,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   updateFlowStateUI();
 
   editor.addEventListener("input", updateFlowStateUI);
+  editor.addEventListener("scroll", syncYamlScroll);
 
   document.getElementById("repl-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -1058,6 +1060,110 @@ window.addEventListener("DOMContentLoaded", async () => {
   await refreshSystemInfo();
   initTooltips();
 });
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function syncYamlScroll() {
+  const editor = document.getElementById("yaml-editor");
+  const highlight = document.getElementById("yaml-highlight");
+  if (!editor || !highlight) return;
+  highlight.scrollTop = editor.scrollTop;
+  highlight.scrollLeft = editor.scrollLeft;
+}
+
+function highlightYamlVars(escaped) {
+  return escaped.replace(
+    /\$\{[A-Za-z0-9_]+\}/g,
+    '<span class="hl-var">$&</span>',
+  );
+}
+
+function highlightYamlValue(rawVal) {
+  if (!rawVal) return "";
+  const trimmed = rawVal.trim();
+  const lead = rawVal.slice(0, rawVal.indexOf(trimmed));
+  const trail = rawVal.slice(rawVal.indexOf(trimmed) + trimmed.length);
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)
+  ) {
+    return `${escapeHtml(lead)}<span class="hl-string">${highlightYamlVars(escapeHtml(trimmed))}</span>${escapeHtml(trail)}`;
+  }
+  if (/^(true|false|null|~|-?\d+(?:\.\d+)?)$/i.test(trimmed)) {
+    return `${escapeHtml(lead)}<span class="hl-number">${escapeHtml(trimmed)}</span>${escapeHtml(trail)}`;
+  }
+  return highlightYamlVars(escapeHtml(rawVal));
+}
+
+function highlightYamlLine(line) {
+  if (/^\s*---+\s*$/.test(line)) {
+    return `<span class="hl-punct">${escapeHtml(line)}</span>`;
+  }
+  if (/^\s*#/.test(line)) {
+    return `<span class="hl-comment">${escapeHtml(line)}</span>`;
+  }
+
+  let body = line;
+  let commentPart = "";
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle && line[i - 1] !== "\\")
+      inDouble = !inDouble;
+    else if (
+      ch === "#" &&
+      !inSingle &&
+      !inDouble &&
+      (i === 0 || /\s/.test(line[i - 1]))
+    ) {
+      body = line.slice(0, i);
+      commentPart = `<span class="hl-comment">${escapeHtml(line.slice(i))}</span>`;
+      break;
+    }
+  }
+
+  const dashMatch = body.match(/^(\s*-\s+)(.*)$/);
+  let prefixHtml = "";
+  let rest = body;
+  let isListItem = false;
+  if (dashMatch) {
+    prefixHtml = `${escapeHtml(dashMatch[1].slice(0, -dashMatch[1].trimStart().length))}<span class="hl-punct">${escapeHtml(dashMatch[1].trimStart())}</span>`;
+    rest = dashMatch[2];
+    isListItem = true;
+  }
+
+  const kvMatch = rest.match(/^(\s*)([A-Za-z0-9_.-]+)(\s*:)(.*)$/);
+  if (kvMatch) {
+    const [, indent, key, colon, val] = kvMatch;
+    return `${prefixHtml}${escapeHtml(indent)}<span class="hl-key">${escapeHtml(key)}</span><span class="hl-punct">${escapeHtml(colon)}</span>${highlightYamlValue(val)}${commentPart}`;
+  }
+
+  if (isListItem && /^[A-Za-z0-9_.-]+\s*$/.test(rest)) {
+    return `${prefixHtml}<span class="hl-cmd">${escapeHtml(rest)}</span>${commentPart}`;
+  }
+
+  return `${prefixHtml}${highlightYamlValue(rest)}${commentPart}`;
+}
+
+function renderYamlHighlight() {
+  const editor = document.getElementById("yaml-editor");
+  const highlight = document.getElementById("yaml-highlight");
+  if (!editor || !highlight) return;
+  const text = editor.value || "";
+  const html = text.split("\n").map(highlightYamlLine).join("\n");
+  highlight.innerHTML = text.endsWith("\n") ? `${html} ` : html;
+  syncYamlScroll();
+}
 
 function initTooltips() {
   const tip = document.createElement("div");

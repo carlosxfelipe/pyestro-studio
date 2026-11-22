@@ -1,5 +1,10 @@
 # Pyestro Studio
 
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8.svg)](https://go.dev/)
+[![License: GPL v3+](https://img.shields.io/badge/License-GPLv3%2B-blue.svg)](LICENSE)
+[![Maestro Compatible](https://img.shields.io/badge/Maestro-compatible-success.svg)](https://docs.maestro.dev/)
+![Platform: macOS | Linux | Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
+
 > **⚠️ THIS PROJECT IS CURRENTLY UNDER DEVELOPMENT.**
 
 Desktop visual inspector, interactive step REPL, and Maestro-compatible YAML flow runner for [Pyestro](https://github.com/carlosxfelipe/pyestro) (Android via ADB) and [Pyestro Web](https://github.com/carlosxfelipe/pyestro-web) (Web & React Native for Web via Playwright).

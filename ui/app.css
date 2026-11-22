@@ -40,6 +40,13 @@
   --destructive-color: #ff7b63;
   --shadow-frame: 0 8px 24px rgba(0, 0, 0, 0.35);
   --toast-bg: rgba(16, 16, 18, 0.94);
+  --yaml-key: #78aeed;
+  --yaml-cmd: #99c1f1;
+  --yaml-string: #8ff0a4;
+  --yaml-number: #ffa348;
+  --yaml-var: #dc8add;
+  --yaml-punct: #f8e45c;
+  --yaml-comment: rgba(255, 255, 255, 0.45);
 }
 
 @media (prefers-color-scheme: light) {
@@ -77,6 +84,13 @@
     --destructive-color: #c01c28;
     --shadow-frame: 0 6px 20px rgba(0, 0, 0, 0.12);
     --toast-bg: rgba(30, 30, 34, 0.94);
+    --yaml-key: #1c71d8;
+    --yaml-cmd: #1a5fb4;
+    --yaml-string: #1b8553;
+    --yaml-number: #b45309;
+    --yaml-var: #7e22ce;
+    --yaml-punct: #8f5200;
+    --yaml-comment: rgba(0, 0, 0, 0.48);
   }
 }
 
@@ -767,20 +781,92 @@ input[type="checkbox"]:focus-visible {
   flex-shrink: 0;
 }
 
-.yaml-editor {
+.yaml-editor-wrap {
+  position: relative;
   flex: 1;
   min-height: 110px;
   width: 100%;
-  resize: none;
+  background: var(--view-bg);
+  overflow: hidden;
+}
+
+.yaml-highlight,
+.yaml-editor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
   border: none;
   outline: none;
-  padding: 12px;
-  background: var(--view-bg);
-  color: var(--fg-color);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   tab-size: 2;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.yaml-highlight {
+  pointer-events: none;
+  background: var(--view-bg);
+  color: var(--fg-color);
+  z-index: 1;
+}
+
+.yaml-editor {
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--fg-color);
+  -webkit-text-fill-color: transparent;
+  z-index: 2;
+}
+
+.yaml-editor::selection {
+  background: rgba(53, 132, 228, 0.28);
+}
+
+.yaml-editor::placeholder {
+  color: var(--dim-color);
+  -webkit-text-fill-color: var(--dim-color);
+}
+
+.hl-key {
+  color: var(--yaml-key);
+  font-weight: 600;
+}
+
+.hl-cmd {
+  color: var(--yaml-cmd);
+  font-weight: 600;
+}
+
+.hl-string {
+  color: var(--yaml-string);
+}
+
+.hl-number {
+  color: var(--yaml-number);
+}
+
+.hl-var {
+  color: var(--yaml-var);
+  font-weight: 600;
+}
+
+.hl-punct {
+  color: var(--yaml-punct);
+  font-weight: 600;
+}
+
+.hl-comment {
+  color: var(--yaml-comment);
+  font-style: italic;
 }
 
 .repl-bar {
