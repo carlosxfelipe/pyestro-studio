@@ -506,6 +506,19 @@
                   <input type="checkbox" id="opt-report" />
                   <span>Generate HTML + JUnit Report</span>
                 </label>
+                <div class="flow-options-spacer"></div>
+                <button
+                  type="button"
+                  class="adw-btn adw-btn-sm env-trigger-btn"
+                  id="btn-env-config"
+                  onclick="openEnvDialog()"
+                  title="Configure .env file and variable overrides (-e)"
+                >
+                  <span>Environment</span>
+                  <span class="status-pill muted" id="env-config-pill"
+                    >Auto</span
+                  >
+                </button>
               </div>
 
               <div class="yaml-editor-wrap">
@@ -892,6 +905,86 @@
         <p class="adw-dialog-body" id="adw-dialog-body"></p>
         <p class="adw-dialog-path hidden" id="adw-dialog-path"></p>
         <div class="adw-dialog-actions" id="adw-dialog-actions"></div>
+      </div>
+    </div>
+
+    <div
+      class="adw-dialog-backdrop hidden"
+      id="env-dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="env-dialog-title"
+    >
+      <div class="adw-alert-dialog env-dialog">
+        <h2 class="adw-dialog-title" id="env-dialog-title">
+          Environment &amp; .env
+        </h2>
+        <p class="adw-dialog-body">
+          Configure an explicit <code>.env</code> file or
+          <code>KEY=VALUE</code> overrides for validation, full flow runs, and
+          single-step REPL execution.
+        </p>
+
+        <div class="env-field-group">
+          <label class="env-field-label" for="env-file-input">
+            <code>.env</code> File (optional)
+          </label>
+          <div class="env-file-row">
+            <input
+              type="text"
+              id="env-file-input"
+              class="adw-input mono-input"
+              placeholder="Auto-detect nearest .env from open flow"
+            />
+            <button
+              type="button"
+              class="adw-btn adw-btn-sm"
+              onclick="browseEnvFile()"
+            >
+              Browse…
+            </button>
+            <button
+              type="button"
+              class="adw-btn adw-btn-sm"
+              onclick="clearEnvFileInput()"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <div class="env-field-group">
+          <label class="env-field-label" for="env-vars-input">
+            Variable Overrides (<code>-e KEY=VALUE</code>)
+          </label>
+          <textarea
+            id="env-vars-input"
+            class="adw-input mono-input env-textarea"
+            rows="5"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            autocorrect="off"
+            placeholder="USER=ana@example.com&#10;TOKEN=secret&#10;# One KEY=VALUE per line"
+          ></textarea>
+          <span class="env-field-hint">
+            Precedence: Overrides (-e) &gt; YAML <code>env:</code> &gt;
+            <code>MAESTRO_*</code> &gt; <code>.env</code>
+          </span>
+        </div>
+
+        <div class="env-dialog-actions">
+          <button type="button" class="adw-btn" onclick="closeEnvDialog(false)">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="adw-btn adw-btn-primary"
+            onclick="closeEnvDialog(true)"
+          >
+            Apply
+          </button>
+        </div>
       </div>
     </div>
 

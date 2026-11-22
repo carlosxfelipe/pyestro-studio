@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import importlib
+import inspect
 import json
 import os
 import re
@@ -124,6 +125,37 @@ def _parse_viewport(value: str) -> tuple[int, int]:
     return (390, 844) if TARGET == "web" else (1080, 1920)
 
 
+def _coerce_env_dict(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(k).strip(): "" if v is None else str(v)
+        for k, v in raw.items()
+        if str(k).strip()
+    }
+
+
+def _fallback_find_env_file(start: Path | None) -> Path | None:
+    base = start.resolve() if start is not None else Path.cwd().resolve()
+    if base.is_file() or (not base.exists() and base.suffix in (".yaml", ".yml")):
+        base = base.parent
+    home = Path.home().resolve()
+    for directory in (base, *base.parents):
+        if directory == home and base != home:
+            break
+        candidate = directory / ".env"
+        if candidate.is_file():
+            return candidate
+        if any(
+            (directory / marker).exists()
+            for marker in (".git", "pyproject.toml", "package.json")
+        ):
+            break
+        if directory == directory.parent:
+            break
+    return None
+
+
 class StudioSession:
     def __init__(self, target: str) -> None:
         self.target = target
@@ -225,6 +257,78 @@ class StudioSession:
             "capturedAt": time.strftime("%H:%M:%S"),
         }
 
+    def _resolve_flow_path(self, params: dict[str, Any]) -> Path | None:
+        raw = (params.get("flowPath") or "").strip()
+        return Path(raw).resolve() if raw else None
+
+    def _resolve_env_file(
+        self, params: dict[str, Any], flow_path: Path | None
+    ) -> Path | None:
+        raw = (params.get("envFile") or "").strip()
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        if not path.is_absolute() and flow_path is not None:
+            path = flow_path.parent / path
+        return path
+
+    def _resolve_dotenv_vars(
+        self, params: dict[str, Any], flow_path: Path | None
+    ) -> dict[str, str]:
+        env_file = self._resolve_env_file(params, flow_path)
+        if hasattr(self.flow_mod, "resolve_dotenv"):
+            return self.flow_mod.resolve_dotenv(flow_path, env_file)
+        if env_file is not None:
+            if not env_file.is_file():
+                raise self.flow_mod.FlowError(f"Env file not found: {env_file}")
+            return self.flow_mod.load_env_file(env_file)
+        merged: dict[str, str] = {}
+        flow_env = _fallback_find_env_file(flow_path) if flow_path else None
+        if flow_env is not None:
+            merged.update(self.flow_mod.load_env_file(flow_env))
+        cwd_env = _fallback_find_env_file(Path.cwd())
+        if cwd_env is not None and cwd_env != flow_env:
+            merged.update(self.flow_mod.load_env_file(cwd_env))
+        return merged
+
+    def _make_runner(
+        self,
+        driver: Any,
+        params: dict[str, Any],
+        flow_path: Path | None,
+        **kwargs: Any,
+    ) -> Any:
+        overrides = _coerce_env_dict(params.get("env"))
+        env_file = self._resolve_env_file(params, flow_path)
+        init_params = inspect.signature(self.runner_mod.FlowRunner.__init__).parameters
+        if "env_file" in init_params:
+            return self.runner_mod.FlowRunner(
+                driver, env=overrides, env_file=env_file, **kwargs
+            )
+        dotenv_vars = self._resolve_dotenv_vars(params, flow_path)
+        return self.runner_mod.FlowRunner(
+            driver, env={**dotenv_vars, **overrides}, **kwargs
+        )
+
+    def _build_step_env(self, params: dict[str, Any]) -> dict[str, str]:
+        flow_path = self._resolve_flow_path(params)
+        dotenv_vars = self._resolve_dotenv_vars(params, flow_path)
+        os_env = (
+            self.runner_mod._env_from_os()
+            if hasattr(self.runner_mod, "_env_from_os")
+            else {}
+        )
+        header_env: dict[str, str] = {}
+        flow_yaml = params.get("flowYaml") or ""
+        if flow_yaml.strip():
+            with suppress(Exception):
+                docs = list(yaml.safe_load_all(flow_yaml))
+                if len(docs) >= 2 and isinstance(docs[0], dict):
+                    header_env = self.flow_mod.parse_config(docs[0]).env
+        session_env = dict(getattr(self.runner, "_env", {}) or {})
+        overrides = _coerce_env_dict(params.get("env"))
+        return {**dotenv_vars, **os_env, **session_env, **header_env, **overrides}
+
     def run_step(self, params: dict[str, Any]) -> dict[str, Any]:
         if self.runner is None or self.driver is None:
             raise RuntimeError(
@@ -251,11 +355,13 @@ class StudioSession:
 
         logs: list[str] = []
         original_echo = self.runner.echo
+        original_env = dict(getattr(self.runner, "_env", {}) or {})
         self.runner.echo = lambda msg: (logs.append(str(msg)), _emit_log(msg))
 
         started = time.monotonic()
         try:
-            env = dict(getattr(self.runner, "_env", {}) or {})
+            env = self._build_step_env(params)
+            self.runner._env = env
             commands = self.flow_mod.compile_commands(raw_commands, env)
             self.runner._run_commands(commands)
             snap = self.snapshot()
@@ -280,10 +386,12 @@ class StudioSession:
             }
         finally:
             self.runner.echo = original_echo
+            self.runner._env = original_env
 
     def validate_yaml(self, params: dict[str, Any]) -> dict[str, Any]:
         yaml_text = params.get("yaml") or ""
-        flow_path = params.get("flowPath") or ""
+        flow_path_raw = (params.get("flowPath") or "").strip()
+        flow_path = self._resolve_flow_path(params)
         if not yaml_text.strip():
             return {
                 "valid": False,
@@ -298,8 +406,12 @@ class StudioSession:
             header, raw_commands = self.flow_mod.read_flow_file(target_file)
             config = self.flow_mod.parse_config(header)
             dummy_driver = self._dummy_driver()
-            runner = self.runner_mod.FlowRunner(dummy_driver)
-            env = runner._build_env(config)
+            runner = self._make_runner(dummy_driver, params, flow_path)
+            build_params = inspect.signature(runner._build_env).parameters
+            if "flow_path" in build_params:
+                env = runner._build_env(config, flow_path)
+            else:
+                env = runner._build_env(config)
             commands = self.flow_mod.compile_commands(raw_commands, env)
             self.flow_mod.compile_commands(config.on_start, env, "onFlowStart › ")
             self.flow_mod.compile_commands(config.on_complete, env, "onFlowComplete › ")
@@ -311,12 +423,13 @@ class StudioSession:
                 "tags": list(getattr(config, "tags", ()) or ()),
                 "steps": len(commands),
                 "engine": self.pkg_name,
-                "flowPath": flow_path,
+                "flowPath": flow_path_raw,
             }
 
     def run_flow_yaml(self, params: dict[str, Any]) -> dict[str, Any]:
         yaml_text = params.get("yaml") or ""
         flow_path_raw = (params.get("flowPath") or "").strip()
+        flow_path = self._resolve_flow_path(params)
         record = bool(params.get("record", False))
         report = bool(params.get("report", False))
 
@@ -331,8 +444,8 @@ class StudioSession:
                     _emit_snapshot(self.snapshot_for(driver))
 
         artifacts_dir = (
-            Path(flow_path_raw).resolve().parent / "artifacts"
-            if flow_path_raw
+            flow_path.parent / "artifacts"
+            if flow_path is not None
             else Path.cwd() / "artifacts"
         )
 
@@ -367,7 +480,7 @@ class StudioSession:
         if self.target == "web" and base_url:
             kwargs["base_url"] = base_url
 
-        runner = self.runner_mod.FlowRunner(driver, **kwargs)
+        runner = self._make_runner(driver, params, flow_path, **kwargs)
         started = time.monotonic()
 
         tmp_ctx: tempfile.TemporaryDirectory[str] | None = None
@@ -402,6 +515,8 @@ class StudioSession:
 
             snap = None
             if not owns_driver:
+                if self.runner is not None:
+                    self.runner._env = dict(getattr(runner, "_env", {}) or {})
                 with suppress(Exception):
                     snap = self.snapshot()
 

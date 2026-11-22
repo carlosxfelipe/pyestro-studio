@@ -173,6 +173,9 @@ func (m *Manager) RunStep(req StepRequest) (StepResponse, error) {
 	raw, err := m.callWorker("run_step", map[string]any{
 		"yaml":     req.YAML,
 		"flowPath": req.FlowPath,
+		"flowYaml": req.FlowYAML,
+		"env":      req.Env,
+		"envFile":  req.EnvFile,
 	})
 	if err != nil {
 		return StepResponse{}, err
@@ -206,6 +209,8 @@ func (m *Manager) ValidateYAML(req ValidateRequest) (ValidateResponse, error) {
 	raw, err := m.callWorker("validate_yaml", map[string]any{
 		"yaml":     req.YAML,
 		"flowPath": req.FlowPath,
+		"env":      req.Env,
+		"envFile":  req.EnvFile,
 	})
 	if err != nil {
 		return ValidateResponse{Valid: false, Error: err.Error(), Engine: tool.Name}, nil
@@ -247,6 +252,8 @@ func (m *Manager) RunFlow(req RunFlowRequest) (RunFlowResponse, error) {
 		"headless": req.Headless,
 		"record":   req.Record,
 		"report":   req.Report,
+		"env":      req.Env,
+		"envFile":  req.EnvFile,
 	})
 	if err != nil {
 		return RunFlowResponse{}, err

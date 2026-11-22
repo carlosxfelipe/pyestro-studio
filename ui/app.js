@@ -24,6 +24,129 @@ let currentSnapshot = null;
 let selectedElement = null;
 let sessionConnected = false;
 let toastTimer = null;
+let currentEnvConfig = { envFile: "", rawEnv: "", env: {} };
+
+function parseEnvOverrides(rawText) {
+  const result = {};
+  for (const rawLine of String(rawText || "").split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    if (/^export\s+/.test(line)) {
+      line = line.replace(/^export\s+/, "");
+    }
+    const eqIdx = line.indexOf("=");
+    if (eqIdx <= 0) continue;
+    const key = line.slice(0, eqIdx).trim();
+    if (!key) continue;
+    let val = line.slice(eqIdx + 1).trim();
+    if (
+      val.length >= 2 &&
+      ((val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'")))
+    ) {
+      val = val.slice(1, -1);
+    }
+    result[key] = val;
+  }
+  return result;
+}
+
+function updateEnvPill() {
+  const count = Object.keys(currentEnvConfig.env || {}).length;
+  const hasFile = Boolean((currentEnvConfig.envFile || "").trim());
+  const parts = [];
+  if (hasFile) parts.push(fileBaseName(currentEnvConfig.envFile));
+  if (count > 0) parts.push(`${count} ${count === 1 ? "var" : "vars"}`);
+  if (parts.length === 0) {
+    setPill("env-config-pill", "muted", "Auto");
+  } else {
+    setPill("env-config-pill", "ok", parts.join(" · "));
+  }
+}
+
+async function loadEnvConfigForCurrentFlow() {
+  if (!window.api_get_env_config) return;
+  try {
+    const cfg = await window.api_get_env_config(currentFlowPath || "");
+    const rawEnv = (cfg && cfg.rawEnv) || "";
+    const envFile = (cfg && cfg.envFile) || "";
+    const env = (cfg && cfg.env) || parseEnvOverrides(rawEnv);
+    currentEnvConfig = { envFile, rawEnv, env };
+    updateEnvPill();
+  } catch (_) {}
+}
+
+let envEscHandler = null;
+
+function openEnvDialog() {
+  const backdrop = document.getElementById("env-dialog-backdrop");
+  const fileInput = document.getElementById("env-file-input");
+  const varsInput = document.getElementById("env-vars-input");
+  if (!backdrop || !fileInput || !varsInput) return;
+
+  fileInput.value = currentEnvConfig.envFile || "";
+  varsInput.value = currentEnvConfig.rawEnv || "";
+  backdrop.classList.remove("hidden");
+
+  if (envEscHandler) window.removeEventListener("keydown", envEscHandler);
+  envEscHandler = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeEnvDialog(false);
+    }
+  };
+  window.addEventListener("keydown", envEscHandler);
+  fileInput.focus();
+}
+
+async function browseEnvFile() {
+  try {
+    const res = await window.api_open_env_file();
+    if (res && res.path) {
+      document.getElementById("env-file-input").value = res.path;
+    }
+  } catch (err) {
+    showToast("Failed to select .env file: " + err);
+  }
+}
+
+function clearEnvFileInput() {
+  const input = document.getElementById("env-file-input");
+  if (input) input.value = "";
+}
+
+async function closeEnvDialog(save) {
+  const backdrop = document.getElementById("env-dialog-backdrop");
+  if (backdrop) backdrop.classList.add("hidden");
+  if (envEscHandler) {
+    window.removeEventListener("keydown", envEscHandler);
+    envEscHandler = null;
+  }
+  if (!save) return;
+
+  const envFile = (
+    document.getElementById("env-file-input").value || ""
+  ).trim();
+  const rawEnv = document.getElementById("env-vars-input").value || "";
+  const env = parseEnvOverrides(rawEnv);
+  currentEnvConfig = { envFile, rawEnv, env };
+  updateEnvPill();
+
+  if (window.api_save_env_config) {
+    try {
+      await window.api_save_env_config({
+        flowPath: currentFlowPath || "",
+        envFile,
+        rawEnv,
+        env,
+      });
+    } catch (err) {
+      showToast("Failed to save environment settings: " + err);
+      return;
+    }
+  }
+  showToast("Environment settings updated");
+}
 
 function showToast(msg) {
   const el = document.getElementById("adw-toast");
@@ -681,9 +804,13 @@ async function quickStep(yamlSnippet) {
   }
   appendLog(`> ${yamlSnippet.replace(/\n/g, " ; ")}`);
   try {
+    const flowYaml = (document.getElementById("yaml-editor") || {}).value || "";
     const res = await window.api_run_step({
       yaml: yamlSnippet,
       flowPath: currentFlowPath,
+      flowYaml,
+      env: currentEnvConfig.env,
+      envFile: currentEnvConfig.envFile,
     });
     if (res.snapshot) applySnapshot(res.snapshot);
     if (res.ok) {
@@ -715,6 +842,8 @@ async function validateCurrentFlow() {
       target: currentTarget,
       yaml,
       flowPath: currentFlowPath,
+      env: currentEnvConfig.env,
+      envFile: currentEnvConfig.envFile,
     });
     if (res.valid) {
       setPill("yaml-valid-pill", "ok", `Valid (${res.steps} steps)`);
@@ -750,6 +879,8 @@ async function runCurrentFlow() {
       headless: document.getElementById("web-headless").checked,
       record: document.getElementById("opt-record").checked,
       report: document.getElementById("opt-report").checked,
+      env: currentEnvConfig.env,
+      envFile: currentEnvConfig.envFile,
     });
     const summary = `Flow finished: ${res.passed}/${res.total} passed (${res.durationMs}ms)`;
     appendLog(summary);
@@ -874,6 +1005,7 @@ async function newFlowTemplate() {
   lastSavedContent = nextTemplate;
   updateFlowStateUI();
   setPill("yaml-valid-pill", "muted", "Unchecked");
+  await loadEnvConfigForCurrentFlow();
 }
 
 async function openFlowDialog() {
@@ -888,6 +1020,7 @@ async function openFlowDialog() {
       lastSavedContent = content;
       updateFlowStateUI();
       setPill("yaml-valid-pill", "muted", "Unchecked");
+      await loadEnvConfigForCurrentFlow();
       await validateCurrentFlow();
     }
   } catch (err) {
@@ -1058,6 +1191,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("resize", fitScreenFrame);
 
   await refreshSystemInfo();
+  await loadEnvConfigForCurrentFlow();
   initTooltips();
 });
 

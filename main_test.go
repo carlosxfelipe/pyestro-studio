@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"pyestro-studio/store"
 	"pyestro-studio/studio"
 
 	"github.com/crgimenes/glaze"
@@ -110,5 +111,43 @@ func TestSaveFlowFileOverwriteProtection(t *testing.T) {
 	}
 	if resp.Hash == "" || resp.Hash == hashBytes(initial) {
 		t.Fatalf("expected updated content hash, got %q", resp.Hash)
+	}
+}
+
+func TestAppAPIEnvConfigPersistence(t *testing.T) {
+	st, err := store.New("pyestro-studio-test", store.Options{
+		Path: filepath.Join(t.TempDir(), "store.json"),
+	})
+	if err != nil {
+		t.Fatalf("store.New: %v", err)
+	}
+
+	api := &AppAPI{store: st}
+	flowA := filepath.Join(t.TempDir(), "a.yaml")
+	flowB := filepath.Join(t.TempDir(), "b.yaml")
+
+	if err := api.SaveEnvConfig(studio.EnvConfig{
+		FlowPath: flowA,
+		EnvFile:  "/tmp/.env.a",
+		RawEnv:   "USER=ana\n",
+		Env:      map[string]string{"USER": "ana"},
+	}); err != nil {
+		t.Fatalf("SaveEnvConfig: %v", err)
+	}
+
+	gotA, err := api.GetEnvConfig(flowA)
+	if err != nil {
+		t.Fatalf("GetEnvConfig(flowA): %v", err)
+	}
+	if gotA.EnvFile != "/tmp/.env.a" || gotA.Env["USER"] != "ana" || gotA.RawEnv != "USER=ana\n" {
+		t.Fatalf("unexpected env config for flowA: %+v", gotA)
+	}
+
+	gotB, err := api.GetEnvConfig(flowB)
+	if err != nil {
+		t.Fatalf("GetEnvConfig(flowB): %v", err)
+	}
+	if gotB.EnvFile != "" || len(gotB.Env) != 0 {
+		t.Fatalf("expected isolated empty env config for flowB, got %+v", gotB)
 	}
 }

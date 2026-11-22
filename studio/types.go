@@ -86,8 +86,11 @@ type Snapshot struct {
 
 // StepRequest executes a single Maestro YAML command snippet against the active session.
 type StepRequest struct {
-	YAML     string `json:"yaml"`
-	FlowPath string `json:"flowPath,omitempty"`
+	YAML     string            `json:"yaml"`
+	FlowPath string            `json:"flowPath,omitempty"`
+	FlowYAML string            `json:"flowYaml,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+	EnvFile  string            `json:"envFile,omitempty"`
 }
 
 // StepResponse returns the outcome of executing an interactive step.
@@ -102,9 +105,11 @@ type StepResponse struct {
 
 // ValidateRequest checks Maestro YAML syntax using the target Python engine.
 type ValidateRequest struct {
-	Target   string `json:"target"`
-	YAML     string `json:"yaml"`
-	FlowPath string `json:"flowPath,omitempty"`
+	Target   string            `json:"target"`
+	YAML     string            `json:"yaml"`
+	FlowPath string            `json:"flowPath,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
+	EnvFile  string            `json:"envFile,omitempty"`
 }
 
 // ValidateResponse summarizes YAML validation results.
@@ -121,16 +126,26 @@ type ValidateResponse struct {
 
 // RunFlowRequest runs a complete Maestro YAML flow using the configured runner.
 type RunFlowRequest struct {
-	Target   string `json:"target"`
-	YAML     string `json:"yaml"`
-	FlowPath string `json:"flowPath,omitempty"`
-	Serial   string `json:"serial,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Browser  string `json:"browser,omitempty"`
-	Viewport string `json:"viewport,omitempty"`
-	Headless bool   `json:"headless"`
-	Record   bool   `json:"record,omitzero"`
-	Report   bool   `json:"report,omitzero"`
+	Target   string            `json:"target"`
+	YAML     string            `json:"yaml"`
+	FlowPath string            `json:"flowPath,omitempty"`
+	Serial   string            `json:"serial,omitempty"`
+	URL      string            `json:"url,omitempty"`
+	Browser  string            `json:"browser,omitempty"`
+	Viewport string            `json:"viewport,omitempty"`
+	Headless bool              `json:"headless"`
+	Record   bool              `json:"record,omitzero"`
+	Report   bool              `json:"report,omitzero"`
+	Env      map[string]string `json:"env,omitempty"`
+	EnvFile  string            `json:"envFile,omitempty"`
+}
+
+// EnvConfig stores per-flow or default environment overrides and .env file path.
+type EnvConfig struct {
+	FlowPath string            `json:"flowPath,omitempty"`
+	EnvFile  string            `json:"envFile,omitempty"`
+	RawEnv   string            `json:"rawEnv,omitempty"`
+	Env      map[string]string `json:"env,omitempty"`
 }
 
 // RunFlowResponse reports the completed flow execution summary.

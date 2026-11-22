@@ -2,6 +2,7 @@ package studio
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,5 +123,123 @@ func TestManagerValidateYAMLWithInstalledTools(t *testing.T) {
 	}
 	if invalidResp.Valid || invalidResp.Error == "" {
 		t.Fatalf("expected invalid flow error for unknownFakeCommand, got %+v", invalidResp)
+	}
+}
+
+func TestManagerValidateYAMLWithDotenvAndEnvOverrides(t *testing.T) {
+	info := GetSystemInfo()
+	if !info.Pyestro.Found {
+		t.Skip("installed pyestro package not available")
+	}
+
+	tmpDir := t.TempDir()
+	otherCWD := filepath.Join(tmpDir, "elsewhere")
+	if err := os.MkdirAll(otherCWD, 0755); err != nil {
+		t.Fatalf("mkdir otherCWD: %v", err)
+	}
+	t.Chdir(otherCWD)
+
+	projectDir := filepath.Join(tmpDir, "project")
+	flowDir := filepath.Join(projectDir, ".maestro")
+	if err := os.MkdirAll(flowDir, 0755); err != nil {
+		t.Fatalf("mkdir flowDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, ".env"), []byte("DOTENV_USER=ana\n"), 0644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	stagingEnv := filepath.Join(projectDir, ".env.staging")
+	if err := os.WriteFile(stagingEnv, []byte("STAGING_USER=bia\n"), 0644); err != nil {
+		t.Fatalf("write .env.staging: %v", err)
+	}
+	flowPath := filepath.Join(flowDir, "smoke.yaml")
+
+	mgr := NewManager(nil)
+	defer mgr.Shutdown()
+
+	// Auto-discovers .env from flowPath ancestors even when Studio CWD is elsewhere.
+	resp, err := mgr.ValidateYAML(ValidateRequest{
+		Target:   "android",
+		FlowPath: flowPath,
+		YAML:     "appId: com.example\n---\n- inputText: ${DOTENV_USER}\n",
+	})
+	if err != nil {
+		t.Fatalf("ValidateYAML dotenv error: %v", err)
+	}
+	if !resp.Valid {
+		t.Fatalf("expected valid flow with auto-discovered .env, got %+v", resp)
+	}
+
+	// Supports explicit envFile and env overrides.
+	resp, err = mgr.ValidateYAML(ValidateRequest{
+		Target:   "android",
+		FlowPath: flowPath,
+		EnvFile:  stagingEnv,
+		Env:      map[string]string{"CLI_TOKEN": "xyz"},
+		YAML:     "appId: com.example\n---\n- inputText: ${STAGING_USER}:${CLI_TOKEN}\n",
+	})
+	if err != nil {
+		t.Fatalf("ValidateYAML envFile+env error: %v", err)
+	}
+	if !resp.Valid {
+		t.Fatalf("expected valid flow with envFile and env overrides, got %+v", resp)
+	}
+
+	// Missing explicit envFile fails validation cleanly.
+	missingResp, err := mgr.ValidateYAML(ValidateRequest{
+		Target:  "android",
+		EnvFile: filepath.Join(projectDir, "missing.env"),
+		YAML:    "appId: com.example\n---\n- launchApp\n",
+	})
+	if err != nil {
+		t.Fatalf("ValidateYAML missing envFile returned transport error: %v", err)
+	}
+	if missingResp.Valid || !strings.Contains(missingResp.Error, "Env file not found") {
+		t.Fatalf("expected invalid flow for missing envFile, got %+v", missingResp)
+	}
+}
+
+func TestWorkerBuildStepEnv(t *testing.T) {
+	info := GetSystemInfo()
+	if !info.Pyestro.Found || info.Pyestro.PythonPath == "" {
+		t.Skip("installed pyestro python not available")
+	}
+
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "app")
+	flowDir := filepath.Join(projectDir, "flows")
+	if err := os.MkdirAll(flowDir, 0755); err != nil {
+		t.Fatalf("mkdir flowDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, ".env"), []byte("A=dotenv\nB=dotenv\nC=dotenv\n"), 0644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	workerFile := filepath.Join(tmpDir, "worker.py")
+	if err := os.WriteFile(workerFile, []byte(embeddedWorkerPy), 0644); err != nil {
+		t.Fatalf("write worker.py: %v", err)
+	}
+
+	script := `
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("studio_worker", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+s = mod.StudioSession("android")
+s.runner = type("R", (), {"_env": {"SESSION": "1"}})()
+env = s._build_step_env({
+    "flowPath": sys.argv[2],
+    "flowYaml": "appId: a.b\nenv:\n  B: header\n  C: header\n---\n- launchApp\n",
+    "env": {"C": "cli"},
+})
+print(json.dumps(env, sort_keys=True))
+`
+	out, err := exec.Command(info.Pyestro.PythonPath, "-c", script, workerFile, filepath.Join(flowDir, "login.yaml")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("python _build_step_env failed: %v\n%s", err, out)
+	}
+	got := string(out)
+	for _, want := range []string{`"A": "dotenv"`, `"B": "header"`, `"C": "cli"`, `"SESSION": "1"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %s in step env, got %s", want, got)
+		}
 	}
 }

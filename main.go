@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 
+	"pyestro-studio/store"
 	"pyestro-studio/studio"
 
 	"github.com/crgimenes/glaze"
@@ -33,6 +34,7 @@ type AppAPI struct {
 	webview glaze.WebView
 	mgr     *studio.Manager
 	events  *glaze.Events
+	store   *store.Store
 }
 
 // SystemInfo detects host tools (uv, adb, pyestro, pyestro-web) and ADB devices.
@@ -176,6 +178,56 @@ func (a *AppAPI) RunFlow(req studio.RunFlowRequest) (studio.RunFlowResponse, err
 // InstallTool installs uv (for the current OS) or runs `uv tool install --upgrade` for pyestro or pyestro-web.
 func (a *AppAPI) InstallTool(req studio.InstallToolRequest) (studio.InstallToolResponse, error) {
 	return a.mgr.InstallToolViaUV(req.Target)
+}
+
+// OpenEnvFile opens a native file picker for selecting a .env file.
+func (a *AppAPI) OpenEnvFile() (studio.BrowseResponse, error) {
+	if a.webview == nil {
+		return studio.BrowseResponse{}, errors.New("webview unavailable")
+	}
+	selected, err := a.webview.OpenFile(glaze.FileDialogOptions{
+		Title: "Select .env File",
+		Filters: []glaze.FileFilter{
+			{Name: "All Files", Extensions: []string{"*"}},
+		},
+	})
+	if err != nil || selected == "" {
+		return studio.BrowseResponse{}, err
+	}
+	return studio.BrowseResponse{Path: selected}, nil
+}
+
+func envStoreKey(flowPath string) string {
+	trimmed := strings.TrimSpace(flowPath)
+	if trimmed == "" {
+		return "env:__default__"
+	}
+	return "env:" + filepath.Clean(trimmed)
+}
+
+// GetEnvConfig loads persisted .env file and variable overrides for a flow (or default).
+func (a *AppAPI) GetEnvConfig(flowPath string) (studio.EnvConfig, error) {
+	if a.store == nil {
+		return studio.EnvConfig{FlowPath: flowPath}, nil
+	}
+	var cfg studio.EnvConfig
+	ok, err := a.store.Get(envStoreKey(flowPath), &cfg)
+	if err != nil {
+		return studio.EnvConfig{}, err
+	}
+	if !ok {
+		return studio.EnvConfig{FlowPath: flowPath}, nil
+	}
+	cfg.FlowPath = flowPath
+	return cfg, nil
+}
+
+// SaveEnvConfig persists .env file and variable overrides for a flow (or default).
+func (a *AppAPI) SaveEnvConfig(cfg studio.EnvConfig) error {
+	if a.store == nil {
+		return nil
+	}
+	return a.store.Set(envStoreKey(cfg.FlowPath), cfg)
 }
 
 // OpenExternal opens a URL or file path using the OS default handler.
@@ -334,10 +386,16 @@ func main() {
 		log.Fatalf("glaze events: %v", err)
 	}
 
+	st, stErr := store.New("pyestro-studio", store.Options{})
+	if stErr != nil {
+		log.Printf("Warning initializing local store: %v", stErr)
+	}
+
 	api := &AppAPI{
 		webview: w,
 		mgr:     mgr,
 		events:  events,
+		store:   st,
 	}
 	if _, err := glaze.BindMethods(w, "api", api); err != nil {
 		log.Fatalf("glaze bind methods: %v", err)
