@@ -538,11 +538,12 @@ func (m *Manager) readStdout(r io.Reader) {
 			continue
 		}
 		var env struct {
-			ID      int64          `json:"id"`
-			Event   string         `json:"event"`
-			Message string         `json:"message"`
-			Result  jsontext.Value `json:"result"`
-			Error   string         `json:"error"`
+			ID       int64          `json:"id"`
+			Event    string         `json:"event"`
+			Message  string         `json:"message"`
+			Snapshot *Snapshot      `json:"snapshot"`
+			Result   jsontext.Value `json:"result"`
+			Error    string         `json:"error"`
 		}
 		if err := json.Unmarshal([]byte(line), &env); err != nil {
 			m.emit("studio:log", line)
@@ -550,6 +551,10 @@ func (m *Manager) readStdout(r io.Reader) {
 		}
 		if env.Event == "log" {
 			m.emit("studio:log", env.Message)
+			continue
+		}
+		if env.Event == "snapshot" && env.Snapshot != nil {
+			m.emit("studio:snapshot", env.Snapshot)
 			continue
 		}
 		if env.ID != 0 {

@@ -357,16 +357,28 @@ function updateSessionControls(connected) {
   );
 }
 
+function normalizeWebUrl(raw) {
+  const value = (raw || "").trim();
+  if (!value) return "";
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(value)) return value;
+  const isLocal =
+    /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(\/|$)/i.test(value);
+  return (isLocal ? "http://" : "https://") + value;
+}
+
 async function connectSession() {
   const btn = document.getElementById("btn-connect");
   btn.disabled = true;
   btn.textContent = "Connecting...";
   try {
+    const urlInput = document.getElementById("web-url");
+    const normalizedUrl = normalizeWebUrl(urlInput.value);
+    if (normalizedUrl) urlInput.value = normalizedUrl;
     const cfg = {
       target: currentTarget,
       serial: document.getElementById("android-serial").value,
       appId: document.getElementById("android-appid").value.trim(),
-      url: document.getElementById("web-url").value.trim(),
+      url: normalizedUrl,
       browser: document.getElementById("web-browser").value,
       viewport: document.getElementById("web-viewport").value,
       headless: document.getElementById("web-headless").checked,
@@ -724,12 +736,15 @@ async function runCurrentFlow() {
   btn.textContent = "Running...";
   const yaml = document.getElementById("yaml-editor").value;
   try {
+    const urlInput = document.getElementById("web-url");
+    const normalizedUrl = normalizeWebUrl(urlInput.value);
+    if (normalizedUrl) urlInput.value = normalizedUrl;
     const res = await window.api_run_flow({
       target: currentTarget,
       yaml,
       flowPath: currentFlowPath,
       serial: document.getElementById("android-serial").value,
-      url: document.getElementById("web-url").value.trim(),
+      url: normalizedUrl,
       browser: document.getElementById("web-browser").value,
       viewport: document.getElementById("web-viewport").value,
       headless: document.getElementById("web-headless").checked,

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import traceback
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,12 @@ TARGET = os.environ.get("PYESTRO_STUDIO_TARGET", "android").strip().lower()
 
 def _emit_log(message: str) -> None:
     payload = {"event": "log", "message": str(message)}
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def _emit_snapshot(snap: dict[str, Any]) -> None:
+    payload = {"event": "snapshot", "snapshot": snap}
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
@@ -86,6 +93,22 @@ def _serialize_elements(elements: list[Any], target: str) -> list[dict[str, Any]
     return serialized
 
 
+def _normalize_url(raw: str) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if re.match(r"^[a-zA-Z][a-zA-Z\d+\-.]*://", value):
+        return value
+    is_local = bool(
+        re.match(
+            r"^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(/|$)",
+            value,
+            re.IGNORECASE,
+        )
+    )
+    return ("http://" if is_local else "https://") + value
+
+
 def _parse_viewport(value: str) -> tuple[int, int]:
     presets = {
         "desktop": (1280, 720),
@@ -115,10 +138,8 @@ class StudioSession:
 
     def close(self) -> None:
         if self.driver is not None and hasattr(self.driver, "close"):
-            try:
+            with suppress(Exception):
                 self.driver.close()
-            except Exception:
-                pass
         self.driver = None
         self.runner = None
 
@@ -141,7 +162,7 @@ class StudioSession:
 
         if self.target == "web":
             web_mod = importlib.import_module("pyestro_web.web")
-            url = (params.get("url") or "http://localhost:8081").strip()
+            url = _normalize_url(params.get("url") or "http://localhost:8081")
             browser = (params.get("browser") or "chromium").strip().lower()
             viewport = _parse_viewport(params.get("viewport") or "mobile")
             headless = bool(params.get("headless", True))
@@ -176,19 +197,21 @@ class StudioSession:
             raise RuntimeError(
                 "No active studio session. Connect to a device or browser first."
             )
+        return self.snapshot_for(self.driver)
 
+    def snapshot_for(self, driver: Any) -> dict[str, Any]:
         with tempfile.TemporaryDirectory(prefix="pyestro-studio-") as tmp:
             png_path = Path(tmp) / "screen.png"
-            self.driver.screenshot(png_path)
+            driver.screenshot(png_path)
             img_b64 = base64.b64encode(png_path.read_bytes()).decode("ascii")
 
-        width, height = self.driver.screen_size()
+        width, height = driver.screen_size()
         current_url = ""
         if self.target == "web":
-            raw_elements = self.driver.dump_elements()
-            current_url = self.driver.current_url()
+            raw_elements = driver.dump_elements()
+            current_url = driver.current_url()
         else:
-            root = self.driver.dump_hierarchy()
+            root = driver.dump_hierarchy()
             raw_elements = self.selectors_mod.parse_elements(root)
 
         elements = _serialize_elements(raw_elements, self.target)
@@ -217,14 +240,12 @@ class StudioSession:
             self.runner._base_dir = Path(flow_path).resolve().parent
 
         parsed = yaml.safe_load(snippet)
-        if isinstance(parsed, dict):
-            raw_commands = [parsed]
-        elif isinstance(parsed, str):
+        if isinstance(parsed, (dict, str)):
             raw_commands = [parsed]
         elif isinstance(parsed, list):
             raw_commands = parsed
         else:
-            raise ValueError(
+            raise TypeError(
                 "Command snippet must be a YAML command or list of commands."
             )
 
@@ -245,12 +266,10 @@ class StudioSession:
                 "logs": logs,
                 "snapshot": snap,
             }
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             snap = None
-            try:
+            with suppress(Exception):
                 snap = self.snapshot()
-            except Exception:
-                pass
             return {
                 "ok": False,
                 "command": snippet.splitlines()[0],
@@ -304,8 +323,12 @@ class StudioSession:
         logs: list[str] = []
 
         def stream_echo(msg: str) -> None:
-            logs.append(str(msg))
-            _emit_log(msg)
+            text = str(msg)
+            logs.append(text)
+            _emit_log(text)
+            if text.lstrip().startswith(("PASS ", "FAIL ")):
+                with suppress(Exception):
+                    _emit_snapshot(self.snapshot_for(driver))
 
         artifacts_dir = (
             Path(flow_path_raw).resolve().parent / "artifacts"
@@ -319,7 +342,7 @@ class StudioSession:
         if owns_driver:
             if self.target == "web":
                 web_mod = importlib.import_module("pyestro_web.web")
-                url = (params.get("url") or "").strip() or None
+                url = _normalize_url(params.get("url") or "") or None
                 browser = (params.get("browser") or "chromium").strip().lower()
                 viewport = _parse_viewport(params.get("viewport") or "mobile")
                 headless = bool(params.get("headless", True))
@@ -336,7 +359,7 @@ class StudioSession:
                 adb_path = (params.get("adbPath") or "adb").strip() or "adb"
                 driver = android_mod.AndroidDriver(serial=serial, adb_path=adb_path)
 
-        base_url = (params.get("url") or "").strip() or None
+        base_url = _normalize_url(params.get("url") or "") or None
         kwargs: dict[str, Any] = {
             "artifacts_dir": artifacts_dir,
             "echo": stream_echo,
@@ -379,10 +402,8 @@ class StudioSession:
 
             snap = None
             if not owns_driver:
-                try:
+                with suppress(Exception):
                     snap = self.snapshot()
-                except Exception:
-                    pass
 
             return {
                 "ok": bool(result.ok),
@@ -400,10 +421,8 @@ class StudioSession:
             if tmp_ctx is not None:
                 tmp_ctx.cleanup()
             if owns_driver and driver is not None and hasattr(driver, "close"):
-                try:
+                with suppress(Exception):
                     driver.close()
-                except Exception:
-                    pass
 
     def _dummy_driver(self) -> Any:
         if self.target == "web":
@@ -455,7 +474,7 @@ def main() -> None:
                 json.dumps({"id": req_id, "result": res}, ensure_ascii=False) + "\n"
             )
             sys.stdout.flush()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             err_msg = str(exc) or type(exc).__name__
             sys.stdout.write(
                 json.dumps(
