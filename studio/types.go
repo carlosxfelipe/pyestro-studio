@@ -174,6 +174,22 @@ type FlowFileResponse struct {
 	Hash    string `json:"hash,omitempty"`
 }
 
+// ProjectFlowEntry describes a YAML flow or .env file discovered inside a project folder.
+type ProjectFlowEntry struct {
+	Name    string `json:"name"`
+	RelPath string `json:"relPath"`
+	Path    string `json:"path"`
+	InDot   bool   `json:"inMaestro,omitzero"`
+}
+
+// ProjectScanResponse summarizes YAML flows and .env files found in a user-selected project folder.
+type ProjectScanResponse struct {
+	Root     string             `json:"root"`
+	Name     string             `json:"name"`
+	Flows    []ProjectFlowEntry `json:"flows"`
+	EnvFiles []ProjectFlowEntry `json:"envFiles"`
+}
+
 // SaveFlowRequest saves YAML content to disk.
 type SaveFlowRequest struct {
 	Path         string `json:"path"`

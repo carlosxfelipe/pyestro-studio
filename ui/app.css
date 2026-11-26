@@ -782,6 +782,60 @@ input[type="checkbox"]:focus-visible {
   flex-shrink: 0;
 }
 
+.project-flow-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--window-bg);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.project-folder-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--fg-color);
+  min-width: 0;
+  max-width: 170px;
+}
+
+.project-folder-label svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--dim-color);
+}
+
+.project-folder-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-flow-select {
+  flex: 1 1 160px;
+  min-height: 28px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.env-project-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.env-project-chips .section-mini-label {
+  margin: 0 2px 0 0;
+}
+
 .flow-options-spacer {
   flex: 1 1 auto;
 }

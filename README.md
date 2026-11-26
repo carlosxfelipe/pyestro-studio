@@ -88,7 +88,7 @@ Run the desktop application directly with Go:
 go run main.go
 ```
 
-If you want to package a standalone desktop binary, use the included Go build scripts (`go run build_mac.go` for a macOS `.app` bundle or `go run build_linux.go` for a Linux `.AppImage`).
+If you want to package a standalone desktop binary, use the included Go build scripts (`go run build_mac.go` for a macOS `.app` bundle, `go run build_linux.go` for a Linux `.AppImage`, or `go run build_windows.go` for a Windows `.exe`).
 
 ## Quick Start Example
 

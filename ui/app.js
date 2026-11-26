@@ -25,6 +25,7 @@ let selectedElement = null;
 let sessionConnected = false;
 let toastTimer = null;
 let currentEnvConfig = { envFile: "", rawEnv: "", env: {} };
+let projectState = { root: "", name: "", flows: [], envFiles: [] };
 
 function parseEnvOverrides(rawText) {
   const result = {};
@@ -86,6 +87,7 @@ function openEnvDialog() {
 
   fileInput.value = currentEnvConfig.envFile || "";
   varsInput.value = currentEnvConfig.rawEnv || "";
+  renderEnvProjectChips();
   backdrop.classList.remove("hidden");
 
   if (envEscHandler) window.removeEventListener("keydown", envEscHandler);
@@ -97,6 +99,32 @@ function openEnvDialog() {
   };
   window.addEventListener("keydown", envEscHandler);
   fileInput.focus();
+}
+
+function renderEnvProjectChips() {
+  const container = document.getElementById("env-project-chips");
+  if (!container) return;
+  const envFiles = (projectState && projectState.envFiles) || [];
+  if (envFiles.length === 0) {
+    container.innerHTML = "";
+    container.classList.add("hidden");
+    return;
+  }
+
+  container.innerHTML = '<span class="section-mini-label">Project:</span>';
+  envFiles.forEach((entry) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "selector-chip";
+    btn.textContent = entry.relPath;
+    btn.title = entry.path;
+    btn.onclick = () => {
+      const fileInput = document.getElementById("env-file-input");
+      if (fileInput) fileInput.value = entry.path;
+    };
+    container.appendChild(btn);
+  });
+  container.classList.remove("hidden");
 }
 
 async function browseEnvFile() {
@@ -940,6 +968,11 @@ function updateFlowStateUI() {
     saveBtn.disabled = canSkipSave;
     saveBtn.title = canSkipSave ? "No unsaved changes" : "Save Flow (Cmd+S)";
   }
+  const projectSelect = document.getElementById("project-flow-select");
+  if (projectSelect && projectState.root) {
+    const hasMatch = projectState.flows.some((f) => f.path === currentFlowPath);
+    projectSelect.value = hasMatch ? currentFlowPath : "";
+  }
 }
 
 function showAdwDialog({ title, body, path, buttons }) {
@@ -1022,23 +1055,177 @@ async function newFlowTemplate() {
   await loadEnvConfigForCurrentFlow();
 }
 
+async function applyLoadedFlow(res) {
+  if (!res || !res.path) return false;
+  currentFlowPath = res.path;
+  currentFlowHash = res.hash || "";
+  const content = res.content || "";
+  document.getElementById("yaml-editor").value = content;
+  lastSavedContent = content;
+  updateFlowStateUI();
+  setPill("yaml-valid-pill", "muted", "Unchecked");
+  await loadEnvConfigForCurrentFlow();
+  await validateCurrentFlow();
+  return true;
+}
+
 async function openFlowDialog() {
   if (!(await confirmDiscardIfDirty())) return;
   try {
     const res = await window.api_open_flow_file();
-    if (res && res.path) {
-      currentFlowPath = res.path;
-      currentFlowHash = res.hash || "";
-      const content = res.content || "";
-      document.getElementById("yaml-editor").value = content;
-      lastSavedContent = content;
-      updateFlowStateUI();
-      setPill("yaml-valid-pill", "muted", "Unchecked");
-      await loadEnvConfigForCurrentFlow();
-      await validateCurrentFlow();
-    }
+    await applyLoadedFlow(res);
   } catch (err) {
     showToast("Failed to open flow: " + err);
+  }
+}
+
+function renderProjectBar() {
+  const bar = document.getElementById("project-flow-bar");
+  const nameEl = document.getElementById("project-folder-name");
+  const countEl = document.getElementById("project-flow-count");
+  const selectEl = document.getElementById("project-flow-select");
+  if (!bar || !nameEl || !countEl || !selectEl) return;
+
+  if (!projectState.root) {
+    bar.classList.add("hidden");
+    selectEl.innerHTML = "";
+    return;
+  }
+
+  nameEl.textContent = projectState.name || fileBaseName(projectState.root);
+  nameEl.title = projectState.root;
+
+  const flows = projectState.flows || [];
+  const countLabel = flows.length === 1 ? "1 flow" : `${flows.length} flows`;
+  setPill("project-flow-count", flows.length > 0 ? "ok" : "warn", countLabel);
+
+  selectEl.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent =
+    flows.length > 0
+      ? "Select a project YAML flow…"
+      : "No .yaml/.yml flows found";
+  selectEl.appendChild(placeholder);
+
+  const maestroFlows = flows.filter((f) => f.inMaestro);
+  const otherFlows = flows.filter((f) => !f.inMaestro);
+
+  const appendGroup = (label, items) => {
+    if (items.length === 0) return;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    items.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.path;
+      opt.textContent = item.relPath;
+      group.appendChild(opt);
+    });
+    selectEl.appendChild(group);
+  };
+
+  if (maestroFlows.length > 0 && otherFlows.length > 0) {
+    appendGroup(".maestro", maestroFlows);
+    appendGroup("Project YAML", otherFlows);
+  } else {
+    flows.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.path;
+      opt.textContent = item.relPath;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  const hasMatch = flows.some((f) => f.path === currentFlowPath);
+  selectEl.value = hasMatch ? currentFlowPath : "";
+  selectEl.disabled = flows.length === 0;
+  bar.classList.remove("hidden");
+}
+
+async function openProjectDialog() {
+  try {
+    const scan = await window.api_open_project_folder();
+    if (!scan || !scan.root) return;
+    projectState = {
+      root: scan.root,
+      name: scan.name || fileBaseName(scan.root),
+      flows: scan.flows || [],
+      envFiles: scan.envFiles || [],
+    };
+    renderProjectBar();
+
+    if (projectState.flows.length === 0) {
+      showToast(`No YAML flows found in ${projectState.name}`);
+      return;
+    }
+
+    if (!currentFlowPath && !isFlowDirty()) {
+      await loadProjectFlowPath(projectState.flows[0].path);
+    } else {
+      showToast(
+        `Loaded ${projectState.flows.length} ${projectState.flows.length === 1 ? "flow" : "flows"} from ${projectState.name}`,
+      );
+    }
+  } catch (err) {
+    showToast("Failed to open project folder: " + err);
+  }
+}
+
+async function refreshProjectFolder(silent) {
+  if (!projectState.root || !window.api_scan_project_folder) return;
+  try {
+    const scan = await window.api_scan_project_folder(projectState.root);
+    if (!scan || !scan.root) return;
+    projectState = {
+      root: scan.root,
+      name: scan.name || projectState.name,
+      flows: scan.flows || [],
+      envFiles: scan.envFiles || [],
+    };
+    renderProjectBar();
+    if (!silent) {
+      showToast(
+        `Found ${projectState.flows.length} ${projectState.flows.length === 1 ? "flow" : "flows"}`,
+      );
+    }
+  } catch (err) {
+    if (!silent) showToast("Failed to rescan project folder: " + err);
+  }
+}
+
+function closeProjectFolder() {
+  projectState = { root: "", name: "", flows: [], envFiles: [] };
+  renderProjectBar();
+}
+
+async function loadProjectFlowPath(selectedPath) {
+  if (!selectedPath) return;
+  const res = await window.api_read_flow_file(selectedPath);
+  await applyLoadedFlow(res);
+}
+
+async function selectProjectFlow(selectedPath) {
+  const selectEl = document.getElementById("project-flow-select");
+  if (!selectedPath || selectedPath === currentFlowPath) return;
+  if (!(await confirmDiscardIfDirty())) {
+    if (selectEl) {
+      const hasMatch = projectState.flows.some(
+        (f) => f.path === currentFlowPath,
+      );
+      selectEl.value = hasMatch ? currentFlowPath : "";
+    }
+    return;
+  }
+  try {
+    await loadProjectFlowPath(selectedPath);
+  } catch (err) {
+    showToast("Failed to open flow: " + err);
+    if (selectEl) {
+      const hasMatch = projectState.flows.some(
+        (f) => f.path === currentFlowPath,
+      );
+      selectEl.value = hasMatch ? currentFlowPath : "";
+    }
   }
 }
 
@@ -1086,6 +1273,9 @@ async function saveFlow(saveAs) {
       currentFlowHash = res.hash || "";
       lastSavedContent = content;
       updateFlowStateUI();
+      if (projectState.root) {
+        await refreshProjectFolder(true);
+      }
       showToast("Flow saved");
       return true;
     }
@@ -1162,6 +1352,7 @@ if (window.glaze && glaze.events) {
   });
   glaze.events.on("app:action", (action) => {
     if (action === "open-flow") openFlowDialog();
+    if (action === "open-project") openProjectDialog();
     if (action === "save-flow") saveFlow(false);
     if (action === "save-flow-as") saveFlow(true);
     if (action === "refresh-snapshot" && sessionConnected) refreshSnapshot();

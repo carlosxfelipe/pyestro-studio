@@ -1,11 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/url"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"pyestro-studio/store"
@@ -66,6 +69,151 @@ func (a *AppAPI) OpenFlowFile() (studio.FlowFileResponse, error) {
 		Content: string(raw),
 		Hash:    hashBytes(raw),
 	}, nil
+}
+
+// OpenProjectFolder opens a native folder picker and scans the chosen project for Maestro YAML flows (including .maestro/) and .env files.
+func (a *AppAPI) OpenProjectFolder() (studio.ProjectScanResponse, error) {
+	if a.webview == nil {
+		return studio.ProjectScanResponse{}, errors.New("webview unavailable")
+	}
+	selected, err := a.webview.OpenDirectory(glaze.FileDialogOptions{
+		Title: "Open Project Folder",
+	})
+	if err != nil || selected == "" {
+		return studio.ProjectScanResponse{}, err
+	}
+	return scanProjectDir(selected)
+}
+
+// ScanProjectFolder rescans a previously selected project directory for YAML flows and .env files.
+func (a *AppAPI) ScanProjectFolder(root string) (studio.ProjectScanResponse, error) {
+	cleanRoot := strings.TrimSpace(root)
+	if cleanRoot == "" {
+		return studio.ProjectScanResponse{}, errors.New("project folder path is empty")
+	}
+	return scanProjectDir(cleanRoot)
+}
+
+// ReadFlowFile reads a YAML flow file from disk and returns its content and hash.
+func (a *AppAPI) ReadFlowFile(filePath string) (studio.FlowFileResponse, error) {
+	cleanPath := strings.TrimSpace(filePath)
+	if cleanPath == "" {
+		return studio.FlowFileResponse{}, errors.New("flow file path is empty")
+	}
+	raw, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return studio.FlowFileResponse{}, err
+	}
+	return studio.FlowFileResponse{
+		Path:    cleanPath,
+		Content: string(raw),
+		Hash:    hashBytes(raw),
+	}, nil
+}
+
+var skippedProjectDirs = map[string]bool{
+	"node_modules": true,
+	"__pycache__":  true,
+	"DerivedData":  true,
+	"Pods":         true,
+	"build":        true,
+	"dist":         true,
+	"target":       true,
+	"artifacts":    true,
+	"venv":         true,
+}
+
+func scanProjectDir(root string) (studio.ProjectScanResponse, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return studio.ProjectScanResponse{}, err
+	}
+	info, err := os.Stat(absRoot)
+	if err != nil {
+		return studio.ProjectScanResponse{}, err
+	}
+	if !info.IsDir() {
+		return studio.ProjectScanResponse{}, fmt.Errorf("not a directory: %s", absRoot)
+	}
+
+	const maxEntries = 200
+	const maxDepth = 5
+
+	res := studio.ProjectScanResponse{
+		Root:     absRoot,
+		Name:     filepath.Base(absRoot),
+		Flows:    []studio.ProjectFlowEntry{},
+		EnvFiles: []studio.ProjectFlowEntry{},
+	}
+
+	_ = filepath.WalkDir(absRoot, func(currPath string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if currPath == absRoot {
+			return nil
+		}
+		rel, err := filepath.Rel(absRoot, currPath)
+		if err != nil {
+			return nil
+		}
+		relSlash := filepath.ToSlash(rel)
+		name := d.Name()
+		depth := strings.Count(relSlash, "/") + 1
+
+		if d.IsDir() {
+			if depth > maxDepth || skippedProjectDirs[name] {
+				return filepath.SkipDir
+			}
+			// Skip hidden directories except .maestro so dot-folder flows are always discovered.
+			if strings.HasPrefix(name, ".") && name != ".maestro" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if len(res.Flows)+len(res.EnvFiles) >= maxEntries {
+			return fs.SkipAll
+		}
+
+		inMaestro := relSlash == ".maestro" || strings.HasPrefix(relSlash, ".maestro/")
+		lower := strings.ToLower(name)
+		if strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") {
+			res.Flows = append(res.Flows, studio.ProjectFlowEntry{
+				Name:    name,
+				RelPath: relSlash,
+				Path:    currPath,
+				InDot:   inMaestro,
+			})
+			return nil
+		}
+
+		if name == ".env" || strings.HasPrefix(name, ".env.") {
+			res.EnvFiles = append(res.EnvFiles, studio.ProjectFlowEntry{
+				Name:    name,
+				RelPath: relSlash,
+				Path:    currPath,
+				InDot:   inMaestro,
+			})
+		}
+		return nil
+	})
+
+	sortEntries := func(entries []studio.ProjectFlowEntry) {
+		slices.SortFunc(entries, func(a, b studio.ProjectFlowEntry) int {
+			if a.InDot != b.InDot {
+				if a.InDot {
+					return -1
+				}
+				return 1
+			}
+			return cmp.Compare(a.RelPath, b.RelPath)
+		})
+	}
+	sortEntries(res.Flows)
+	sortEntries(res.EnvFiles)
+
+	return res, nil
 }
 
 func hashBytes(data []byte) string {
@@ -409,6 +557,8 @@ func main() {
 		}},
 		{Title: "File", Submenu: []menu.Item{
 			{Title: "Open Flow...", Shortcut: "cmd+o", OnClick: func() { _ = events.Emit("app:action", "open-flow") }},
+			{Title: "Open Project Folder...", Shortcut: "cmd+shift+o", OnClick: func() { _ = events.Emit("app:action", "open-project") }},
+			{Separator: true},
 			{Title: "Save Flow", Shortcut: "cmd+s", OnClick: func() { _ = events.Emit("app:action", "save-flow") }},
 			{Title: "Save Flow As...", Shortcut: "cmd+shift+s", OnClick: func() { _ = events.Emit("app:action", "save-flow-as") }},
 		}},

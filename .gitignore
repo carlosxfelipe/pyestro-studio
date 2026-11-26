@@ -5,6 +5,8 @@ dist/
 build/
 *.exe
 *.exe~
+*.syso
+*.zip
 *.dll
 *.so
 *.dylib

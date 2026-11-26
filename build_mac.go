@@ -19,7 +19,7 @@ func main() {
 	macOSDir := filepath.Join(contentsDir, "MacOS")
 	resourcesDir := filepath.Join(contentsDir, "Resources")
 
-	fmt.Printf("Building macOS Application Bundle: %s\n", appBundle)
+	fmt.Printf("🍎 Building macOS Application Bundle: %s\n", appBundle)
 
 	_ = os.RemoveAll(appBundle)
 	if err := os.MkdirAll(macOSDir, 0755); err != nil {
@@ -29,6 +29,7 @@ func main() {
 		fatalf("failed to create Resources directory: %v", err)
 	}
 
+	fmt.Println("🔨 Compiling Go binary (CGO_ENABLED=0)...")
 	binPath := filepath.Join(macOSDir, appName)
 	buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", binPath, ".")
 	buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -39,11 +40,13 @@ func main() {
 	icnsSrc := filepath.Join("assets", "app.icns")
 	icnsDst := filepath.Join(resourcesDir, "app.icns")
 	if data, err := os.ReadFile(icnsSrc); err == nil {
+		fmt.Println("🎨 Copying app icon...")
 		if err := os.WriteFile(icnsDst, data, 0644); err != nil {
 			fatalf("failed to write app.icns: %v", err)
 		}
 	}
 
+	fmt.Println("📝 Writing Info.plist and PkgInfo...")
 	plistPath := filepath.Join(contentsDir, "Info.plist")
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,10 +83,10 @@ func main() {
 	}
 
 	_ = os.WriteFile(filepath.Join(contentsDir, "PkgInfo"), []byte("APPL????"), 0644)
-	fmt.Printf("Successfully generated: %s\n", appBundle)
+	fmt.Printf("✅ Successfully generated: %s\n", appBundle)
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "❌ Error: "+format+"\n", args...)
 	os.Exit(1)
 }

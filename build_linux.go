@@ -32,6 +32,8 @@ func main() {
 	appDirName := strings.ReplaceAll(appName, " ", "_") + ".AppDir"
 	outputAppImage := fmt.Sprintf("%s-%s-%s.AppImage", strings.ReplaceAll(appName, " ", "_"), version, arch)
 
+	fmt.Printf("🐧 Building Linux AppImage: %s\n", outputAppImage)
+
 	_ = os.RemoveAll(appDirName)
 	_ = os.Remove(outputAppImage)
 
@@ -39,12 +41,14 @@ func main() {
 	applicationsDir := filepath.Join(appDirName, "usr", "share", "applications")
 	iconsDir := filepath.Join(appDirName, "usr", "share", "icons", "hicolor", "256x256", "apps")
 
+	fmt.Println("📁 Creating AppDir structure...")
 	for _, d := range []string{binDir, applicationsDir, iconsDir} {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			fatalf("failed to create %s: %v", d, err)
 		}
 	}
 
+	fmt.Println("🔨 Compiling Go binary (CGO_ENABLED=0)...")
 	binPath := filepath.Join(binDir, execName)
 	buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", binPath, ".")
 	buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -54,11 +58,13 @@ func main() {
 
 	iconSrc := filepath.Join("assets", "icon.png")
 	if data, err := os.ReadFile(iconSrc); err == nil {
+		fmt.Println("🎨 Copying app icon...")
 		_ = os.WriteFile(filepath.Join(appDirName, execName+".png"), data, 0644)
 		_ = os.WriteFile(filepath.Join(appDirName, ".DirIcon"), data, 0644)
 		_ = os.WriteFile(filepath.Join(iconsDir, execName+".png"), data, 0644)
 	}
 
+	fmt.Println("📝 Writing .desktop entries and AppRun...")
 	desktopContent := fmt.Sprintf(`[Desktop Entry]
 Type=Application
 Name=%s
@@ -88,11 +94,13 @@ exec "${HERE}/usr/bin/%s" "$@"
 		fatalf("failed to write AppRun: %v", err)
 	}
 
+	fmt.Println("🔍 Locating appimagetool...")
 	toolPath, err := ensureAppImageTool(arch)
 	if err != nil {
 		fatalf("failed to obtain appimagetool: %v", err)
 	}
 
+	fmt.Println("📦 Packaging AppImage...")
 	pkgCmd := exec.Command(toolPath, appDirName, outputAppImage)
 	pkgCmd.Env = append(os.Environ(),
 		fmt.Sprintf("ARCH=%s", arch),
@@ -107,7 +115,7 @@ exec "${HERE}/usr/bin/%s" "$@"
 	if !*keepAppDir {
 		_ = os.RemoveAll(appDirName)
 	}
-	fmt.Printf("Successfully generated: %s\n", outputAppImage)
+	fmt.Printf("✅ Successfully generated: %s\n", outputAppImage)
 }
 
 func appImageArch(goarch string) string {
@@ -145,6 +153,7 @@ func ensureAppImageTool(arch string) (string, error) {
 		return toolPath, nil
 	}
 
+	fmt.Printf("⬇️  Downloading appimagetool for %s...\n", arch)
 	url := fmt.Sprintf("https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-%s.AppImage", arch)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -177,6 +186,6 @@ func ensureAppImageTool(arch string) (string, error) {
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "❌ Error: "+format+"\n", args...)
 	os.Exit(1)
 }

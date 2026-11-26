@@ -151,3 +151,67 @@ func TestAppAPIEnvConfigPersistence(t *testing.T) {
 		t.Fatalf("expected isolated empty env config for flowB, got %+v", gotB)
 	}
 }
+
+func TestScanProjectDirAndReadFlowFile(t *testing.T) {
+	root := t.TempDir()
+	maestroDir := filepath.Join(root, ".maestro")
+	subMaestroDir := filepath.Join(maestroDir, "sub")
+	gitDir := filepath.Join(root, ".git")
+	nodeModules := filepath.Join(root, "node_modules", "pkg")
+
+	for _, dir := range []string{subMaestroDir, gitDir, nodeModules} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	smokePath := filepath.Join(maestroDir, "smoke.yaml")
+	subPath := filepath.Join(subMaestroDir, "login.yml")
+	rootFlowPath := filepath.Join(root, "flow.yaml")
+	envPath := filepath.Join(root, ".env")
+	ignoredGit := filepath.Join(gitDir, "ignored.yaml")
+	ignoredNode := filepath.Join(nodeModules, "ignored.yaml")
+
+	files := map[string]string{
+		smokePath:    "appId: com.example\n---\n- launchApp\n",
+		subPath:      "appId: com.example\n---\n- tapOn: Login\n",
+		rootFlowPath: "appId: com.example\n---\n- assertVisible: Home\n",
+		envPath:      "EMAIL=user@example.com\n",
+		ignoredGit:   "ignored: true\n",
+		ignoredNode:  "ignored: true\n",
+	}
+	for p, content := range files {
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+
+	api := &AppAPI{}
+	scan, err := api.ScanProjectFolder(root)
+	if err != nil {
+		t.Fatalf("ScanProjectFolder: %v", err)
+	}
+	if len(scan.Flows) != 3 {
+		t.Fatalf("expected 3 flows (.maestro + root), got %d: %+v", len(scan.Flows), scan.Flows)
+	}
+	if !scan.Flows[0].InDot || scan.Flows[0].RelPath != ".maestro/smoke.yaml" {
+		t.Fatalf("expected .maestro/smoke.yaml first, got %+v", scan.Flows[0])
+	}
+	if !scan.Flows[1].InDot || scan.Flows[1].RelPath != ".maestro/sub/login.yml" {
+		t.Fatalf("expected .maestro/sub/login.yml second, got %+v", scan.Flows[1])
+	}
+	if scan.Flows[2].InDot || scan.Flows[2].RelPath != "flow.yaml" {
+		t.Fatalf("expected flow.yaml third, got %+v", scan.Flows[2])
+	}
+	if len(scan.EnvFiles) != 1 || scan.EnvFiles[0].RelPath != ".env" {
+		t.Fatalf("expected [.env] in EnvFiles, got %+v", scan.EnvFiles)
+	}
+
+	loaded, err := api.ReadFlowFile(smokePath)
+	if err != nil {
+		t.Fatalf("ReadFlowFile: %v", err)
+	}
+	if loaded.Path != smokePath || loaded.Content != files[smokePath] || loaded.Hash == "" {
+		t.Fatalf("unexpected ReadFlowFile response: %+v", loaded)
+	}
+}
